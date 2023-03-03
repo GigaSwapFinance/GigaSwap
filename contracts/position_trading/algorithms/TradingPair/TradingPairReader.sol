@@ -34,6 +34,7 @@ contract TradingPairReader {
             .totalSupply();
 
         data.feeSettings = algorithm.getFeeSettings(positionId);
+        data.constraints = algorithm.getConstraints(positionId);
         data.feeToken = algorithm.getFeeToken(positionId);
         data.feeTokenTotalSupply = Erc20ForFactory(data.feeToken).totalSupply();
 

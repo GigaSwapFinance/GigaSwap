@@ -73,11 +73,14 @@ library ItemRefAsAssetLibrary {
         return assetsController(ref).getCode(ref.id);
     }
 
-    function contractAddr(ItemRef memory ref)
-        internal
-        view
-        returns (address)
-    {
+    function contractAddr(ItemRef memory ref) internal view returns (address) {
         return assetsController(ref).contractAddr(ref.id);
+    }
+
+    function getDecimals(ItemRef memory ref) internal view returns (uint8) {
+        AssetData memory data = assetsController(ref).getData(ref.id);
+        if (data.assetTypeId == 1) return 18;
+        if (data.assetTypeId == 2) return 9;
+        return 0;
     }
 }

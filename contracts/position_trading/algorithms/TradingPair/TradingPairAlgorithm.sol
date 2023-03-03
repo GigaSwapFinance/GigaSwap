@@ -4,11 +4,12 @@ pragma solidity ^0.8.17;
 import 'contracts/position_trading/algorithms/PositionAlgorithm.sol';
 import 'contracts/position_trading/IPositionsController.sol';
 import 'contracts/position_trading/PositionSnapshot.sol';
-import 'contracts/lib/erc20/Erc20ForFactory.sol';
+import 'contracts/lib/erc20/IErc20ForFactoryFactory.sol';
 import 'contracts/position_trading/algorithms/TradingPair/TradingPairFeeDistributer.sol';
 import 'contracts/position_trading/algorithms/TradingPair/ITradingPairFeeDistributer.sol';
 import 'contracts/position_trading/algorithms/TradingPair/ITradingPairAlgorithm.sol';
 import 'contracts/position_trading/algorithms/TradingPair/FeeSettings.sol';
+import 'contracts/position_trading/algorithms/TradingPair/TradingPairConstraints.sol';
 import 'contracts/position_trading/AssetTransferData.sol';
 
 struct SwapVars {
@@ -48,34 +49,48 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
     uint256 public constant priceDecimals = 1e18;
 
     mapping(uint256 => FeeSettings) public fee;
-    mapping(uint256 => address) public liquidityTokens;
-    mapping(uint256 => address) public feeTokens;
+    mapping(uint256 => TradingPairConstraints) public constraints;
+    mapping(uint256 => IErc20ForFactory) public liquidityTokens;
+    mapping(uint256 => IErc20ForFactory) public feeTokens;
     mapping(uint256 => address) public feeDistributers;
+    IErc20ForFactoryFactory public erc20Factory;
 
-    constructor(address positionsControllerAddress)
+    constructor(address positionsControllerAddress, address erc20Factory_)
         PositionAlgorithm(positionsControllerAddress)
-    {}
+    {
+        erc20Factory = IErc20ForFactoryFactory(erc20Factory_);
+    }
 
     receive() external payable {}
 
     function createAlgorithm(
         uint256 positionId,
-        FeeSettings calldata feeSettings
+        FeeSettings calldata feeSettings,
+        TradingPairConstraints calldata constraints_
     ) external onlyFactory {
         positionsController.setAlgorithm(positionId, address(this));
 
         // set fee settings
         fee[positionId] = feeSettings;
 
-        Erc20ForFactory liquidityToken = new Erc20ForFactory(
+        // constraints
+        constraints[positionId] = constraints_;
+
+        // getting assets refs
+        (ItemRef memory own, ItemRef memory out) = _getAssets(positionId);
+
+        // calc support decimals
+        uint8 decimals = own.getDecimals();
+        if (out.getDecimals() > decimals) decimals = out.getDecimals();
+
+        IErc20ForFactory liquidityToken = erc20Factory.create(
             'liquidity',
             'LIQ',
-            0
+            decimals
         );
-        Erc20ForFactory feeToken = new Erc20ForFactory('fee', 'FEE', 0);
-        liquidityTokens[positionId] = address(liquidityToken);
-        feeTokens[positionId] = address(feeToken);
-        (ItemRef memory own, ItemRef memory out) = _getAssets(positionId);
+        IErc20ForFactory feeToken = erc20Factory.create('fee', 'FEE', decimals);
+        liquidityTokens[positionId] = liquidityToken;
+        feeTokens[positionId] = feeToken;
         liquidityToken.mintTo(
             positionsController.ownerOf(positionId),
             own.count() * out.count()
@@ -107,6 +122,14 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         return fee[positionId];
     }
 
+    function getConstraints(uint256 positionId)
+        external
+        view
+        returns (TradingPairConstraints memory)
+    {
+        return constraints[positionId];
+    }
+
     function _positionLocked(uint256 positionId)
         internal
         view
@@ -133,7 +156,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         ethSurplus = msg.value;
         // position must be created
         require(
-            liquidityTokens[positionId] != address(0),
+            address(liquidityTokens[positionId]) != address(0),
             'position id is not exists'
         );
         AddLiquidityVars memory vars;
@@ -149,9 +172,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
             vars.assetBCode
         );
         // take total supply of liquidity tokens
-        Erc20ForFactory liquidityToken = Erc20ForFactory(
-            liquidityTokens[positionId]
-        );
+        IErc20ForFactory liquidityToken = liquidityTokens[positionId];
 
         vars.countB = (count * assetB.count()) / assetA.count();
 
@@ -186,6 +207,13 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
                 (assetA.count() - vars.lastAssetACount)) /
             vars.lastAssetACount;
         liquidityToken.mintTo(msg.sender, vars.liquidityTokensToMint);
+        // mint fee tokens
+        IErc20ForFactory feeToken = feeTokens[positionId];
+        feeToken.mintTo(
+            msg.sender,
+            (feeToken.totalSupply() * (assetA.count() - vars.lastAssetACount)) /
+                vars.lastAssetACount
+        );
 
         // log event
         if (assetCode == 1) {
@@ -316,21 +344,19 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         // transfers from assets are not processed
         if (arg.from == asset1.addr || arg.from == asset2.addr) return;
         // swap only if editing is locked
-        require(
-            _positionLocked(arg.positionId), 
-            'no lk pos'
-        );
+        require(_positionLocked(arg.positionId), 'no lk pos');
         // if there is no snapshot, then we do nothing
-        require(
-            arg.data.length == 3,
-            'no snpsht'
-        );
+        require(arg.data.length == 3, 'no snpsht');
 
         // take fee
         FeeSettings memory feeSettings = fee[arg.positionId];
         // make a swap
-        if (arg.assetCode == 2)
+        if (arg.assetCode == 2) {
             // if the exchange is direct
+            require(
+                !constraints[arg.positionId].disableForwardSwap,
+                'forward swap is disallowed'
+            );
             _swap(
                 arg.positionId,
                 arg.from,
@@ -345,7 +371,11 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
                 ITradingPairFeeDistributer(feeDistributers[arg.positionId])
                     .asset(1)
             );
-        else
+        } else {
+            require(
+                !constraints[arg.positionId].disableBackSwap,
+                'back swap is disallowed'
+            );
             _swap(
                 arg.positionId,
                 arg.from,
@@ -360,6 +390,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
                 ITradingPairFeeDistributer(feeDistributers[arg.positionId])
                     .asset(2)
             );
+        }
     }
 
     function _swap(
@@ -437,10 +468,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
             vars.slippage = (vars.newPrice * priceDecimals) / vars.snapPrice;
         else vars.slippage = (vars.snapPrice * priceDecimals) / vars.newPrice;
 
-        require(
-            vars.slippage <= snapshot.slippage,
-            'chngd more than slppg'
-        );
+        require(vars.slippage <= snapshot.slippage, 'chngd more than slppg');
 
         // price should not change more than 50%
         vars.priceImpact = (vars.newPrice * priceDecimals) / vars.lastPrice;
@@ -461,25 +489,34 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
     }
 
     function withdraw(uint256 positionId, uint256 liquidityCount) external {
-        // take a token
-        address liquidityAddr = liquidityTokens[positionId];
+        // take a tokens
+        IErc20ForFactory liquidityToken = liquidityTokens[positionId];
+        IErc20ForFactory feeToken = feeTokens[positionId];
+        require(address(liquidityToken) != address(0), 'no lquidity tokens');
         require(
-            liquidityAddr != address(0),
-            'no lqdty tkns'
+            liquidityToken.balanceOf(msg.sender) >= liquidityCount,
+            'not enough liquidity tokens balance'
+        );
+        require(
+            address(feeToken) == address(0) ||
+                feeToken.balanceOf(msg.sender) >= liquidityCount,
+            'not enough fee tokens balance'
         );
         // take assets
         (ItemRef memory own, ItemRef memory out) = _getAssets(positionId);
         // withdraw of owner asset
         uint256 asset1Count = (own.count() * liquidityCount) /
-            Erc20ForFactory(liquidityAddr).totalSupply();
+            liquidityToken.totalSupply();
         positionsController.withdrawInternal(own, msg.sender, asset1Count);
         // withdraw asset output
         uint256 asset2Count = (out.count() * liquidityCount) /
-            Erc20ForFactory(liquidityAddr).totalSupply();
+            liquidityToken.totalSupply();
         positionsController.withdrawInternal(out, msg.sender, asset2Count);
 
-        // burn liquidity token
-        Erc20ForFactory(liquidityAddr).burn(msg.sender, liquidityCount);
+        // burn liquidity and fee tokens
+        liquidityToken.burn(msg.sender, liquidityCount);
+        if (address(feeToken) != address(0))
+            feeToken.burn(msg.sender, liquidityCount);
 
         // log event
         emit OnRemoveLiquidity(
@@ -496,10 +533,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         uint256 assetCode,
         uint256 count
     ) external view {
-        require(
-            !this.positionLocked(asset.getPositionId()),
-            'locked'
-        );
+        require(!this.positionLocked(asset.getPositionId()), 'locked');
     }
 
     function getSnapshot(uint256 positionId, uint256 slippage)
@@ -527,11 +561,11 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         view
         returns (address)
     {
-        return liquidityTokens[positionId];
+        return address(liquidityTokens[positionId]);
     }
 
     function getFeeToken(uint256 positionId) external view returns (address) {
-        return feeTokens[positionId];
+        return address(feeTokens[positionId]);
     }
 
     function getFeeDistributer(uint256 positionId)

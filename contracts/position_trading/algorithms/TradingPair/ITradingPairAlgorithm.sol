@@ -3,6 +3,7 @@ pragma solidity ^0.8.17;
 
 import 'contracts/position_trading/algorithms/TradingPair/FeeSettings.sol';
 import 'contracts/position_trading/AssetData.sol';
+import 'contracts/position_trading/algorithms/TradingPair/TradingPairConstraints.sol';
 
 interface ITradingPairAlgorithm {
     /// @dev swap event
@@ -46,7 +47,8 @@ interface ITradingPairAlgorithm {
     /// onlyFactory
     function createAlgorithm(
         uint256 positionId,
-        FeeSettings calldata feeSettings
+        FeeSettings calldata feeSettings,
+        TradingPairConstraints calldata constraints
     ) external;
 
     /// @dev the positions controller
@@ -72,6 +74,12 @@ interface ITradingPairAlgorithm {
         external
         view
         returns (address);
+
+    /// @dev returns the positions constraints
+    function getConstraints(uint256 positionId)
+        external
+        view
+        returns (TradingPairConstraints memory);
 
     /// @dev withdraw
     function withdraw(uint256 positionId, uint256 liquidityCount) external;

@@ -2,18 +2,20 @@
 pragma solidity ^0.8.17;
 
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import './IErc20ForFactory.sol';
 
-contract Erc20ForFactory is ERC20 {
+contract Erc20ForFactory is IErc20ForFactory, ERC20 {
     uint8 _decimals;
     address public factory;
 
     constructor(
         string memory name_,
         string memory symbol_,
+        address factory_,
         uint8 decimals_
     ) ERC20(name_, symbol_) {
         _decimals = decimals_;
-        factory = msg.sender;
+        factory = factory_;
     }
 
     modifier onlyFactory() {

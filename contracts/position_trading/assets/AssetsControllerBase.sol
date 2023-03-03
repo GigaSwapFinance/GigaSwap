@@ -134,7 +134,7 @@ abstract contract AssetsControllerBase is IAssetsController {
             'only for positions controller or algorithm'
         );
 
-        _withdraw(assetId, recepient, count);
+        if (recepient != address(this)) _withdraw(assetId, recepient, count);
         _counts[assetId] -= count;
     }
 

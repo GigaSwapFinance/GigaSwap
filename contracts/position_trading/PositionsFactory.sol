@@ -10,6 +10,7 @@ import 'contracts/position_trading/algorithms/TradingPair/ITradingPairAlgorithm.
 import 'contracts/position_trading/algorithms/TradingPair/FeeSettings.sol';
 import 'contracts/position_trading/AssetCreationData.sol';
 import 'contracts/position_trading/ItemRefAsAssetLibrary.sol';
+import 'contracts/position_trading/algorithms/TradingPair/TradingPairConstraints.sol';
 
 contract PositionsFactory is OwnableSimple {
     using ItemRefAsAssetLibrary for ItemRef;
@@ -68,11 +69,16 @@ contract PositionsFactory is OwnableSimple {
     function createTradingPairPosition(
         AssetCreationData calldata data1,
         AssetCreationData calldata data2,
-        FeeSettings calldata feeSettings
+        FeeSettings calldata feeSettings,
+        TradingPairConstraints calldata constraints
     ) external payable returns (uint256 ethSurplus) {
         require(
             !(data1.assetTypeCode == 1 && data2.assetTypeCode == 1),
             'can not create eth/eth trading pair'
+        );
+        require(
+            !constraints.disableForwardSwap || !constraints.disableBackSwap,
+            'both directions of the swap are disallowed'
         );
 
         ethSurplus = msg.value;
@@ -84,7 +90,7 @@ contract PositionsFactory is OwnableSimple {
         ethSurplus = _createAsset(positionId, 2, data2, ethSurplus);
 
         // set algorithm
-        tradingPair.createAlgorithm(positionId, feeSettings);
+        tradingPair.createAlgorithm(positionId, feeSettings, constraints);
 
         positionsController.stopBuild(positionId);
 

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.17;
 
 import 'contracts/position_trading/algorithms/TradingPair/FeeSettings.sol';
+import 'contracts/position_trading/algorithms/TradingPair/TradingPairConstraints.sol';
 import 'contracts/position_trading/AssetData.sol';
 
 /// @dev the full trading pair data
@@ -18,4 +19,5 @@ struct TradingPairData {
     uint256 feeDistributerAsset2Count;
     AssetData asset1;
     AssetData asset2;
+    TradingPairConstraints constraints;
 }

@@ -278,14 +278,9 @@ contract PositionsController is HasFactories, IPositionsController {
             from.assetTypeId() == to.assetTypeId(),
             'transfer from asset to must be same types'
         );
-        if (to.assetTypeId() == 2) {
-            uint256 lastBalance = IErc20Balance(to.contractAddr()).balanceOf(to.addr);
-            from.withdraw(to.addr, count);
-            to.addCount(IErc20Balance(to.contractAddr()).balanceOf(to.addr) - lastBalance);
-        } else {
-            from.withdraw(to.addr, count);
-            to.addCount(count);
-        }
+
+        from.withdraw(to.addr, count);
+        to.addCount(count);
     }
 
     function withdraw(

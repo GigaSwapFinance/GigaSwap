@@ -10,6 +10,6 @@ struct AssetData {
     uint256 positionAssetCode; // code of the asset - 1 or 2
     address owner;
     uint256 count; // current count of the asset
-    address contractAddr; // contract, using in asset  or zero if ether
+    address contractAddr; // contract, using in asset or zero if ether
     uint256 value; // extended asset value (nft id for example)
 }
