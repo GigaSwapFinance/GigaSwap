@@ -29,11 +29,13 @@ describe("stacking:", function () {
 
     describe("ethereum", async () => {
         it("изначальная ситуация", async () => {
-            expect(await stacking.timeInterval()).to.eq(604800); // 1 неделя
-            expect(await stacking.nextEthIntervalLapsedSeconds()).to.eq(604799); // до след интервала 1 неделя
-            expect(await stacking.ethIntervalNumber()).to.eq(0);
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
-            expect(await stacking.ethClaimForStack(1000)).to.eq(0);
+            expect(await stacking.timeIntervalLength()).to.eq(604800); // 1 неделя
+            expect(await stacking.nextIntervalLapsedSeconds()).to.eq(604799); // до след интервала 1 неделя
+            expect(await stacking.intervalNumber()).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, stackingErc20.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForStack(1000)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForStack(1000, erc20.address)).to.eq(0);
         });
 
         it("проверка создания и вывода стака", async () => {
@@ -45,7 +47,7 @@ describe("stacking:", function () {
             // стак имеется на контракте
             expect((await stacking.getStack(owner.address))[0]).to.eq(100);
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(100);
+            expect(await stacking.totalStacks()).to.eq(100);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(100);
 
@@ -61,7 +63,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(200);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(300);
+            expect(await stacking.totalStacks()).to.eq(300);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(300);
@@ -74,7 +76,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(200);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(200);
+            expect(await stacking.totalStacks()).to.eq(200);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(100);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(200);
@@ -87,7 +89,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(50);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(50);
+            expect(await stacking.totalStacks()).to.eq(50);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(100);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(150);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(50);
@@ -100,7 +102,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(0);
+            expect(await stacking.totalStacks()).to.eq(0);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(100);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(200);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(0);
@@ -125,27 +127,27 @@ describe("stacking:", function () {
 
             // видим баланс эфира на контракте
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(ethers.utils.parseEther("1.0"));
-            expect(await stacking.totalEthForClaimOnInterval()).to.eq(0);
-            expect(await stacking.ethIntervalNumber()).to.eq(0);
+            expect(await stacking.ethOnInterval()).to.eq(0);
+            expect(await stacking.intervalNumber()).to.eq(0);
 
             // вначале не клаймится
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
             await expect(stacking.claimEth()).to.be.revertedWith('can not claim on current interval');
 
             // выжидаем 
-            expect(await stacking.ethIntervalNumber()).to.eq(0);
+            expect(await stacking.intervalNumber()).to.eq(0);
             await Up(Seconds(604800));
-            expect(await stacking.ethIntervalNumber()).to.eq(1);
+            expect(await stacking.intervalNumber()).to.eq(1);
 
             // клаймим
-            expect(await stacking.totalEthForClaimOnInterval()).to.eq(ethers.utils.parseEther("1.0"));
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(ethers.utils.parseEther("1.0"));
+            expect(await stacking.ethOnInterval()).to.eq(ethers.utils.parseEther("1.0"));
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(ethers.utils.parseEther("1.0"));
             expect(await stacking.claimEth()).to.emit(stacking, 'OnClaimEth').withArgs(ethers.utils.parseEther("1.0"));
-            expect(await stacking.ethIntervalNumber()).to.eq(1);
+            expect(await stacking.intervalNumber()).to.eq(1);
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(ethers.utils.parseEther("0.0"));
 
             // после клайма нельзя клаймить повторно
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
             await expect(stacking.claimEth()).to.be.revertedWith('can not claim on current interval');
         });
 
@@ -167,30 +169,30 @@ describe("stacking:", function () {
 
             // видим баланс эфира на контракте
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(ethers.utils.parseEther("3.0"));
-            expect(await stacking.totalEthForClaimOnInterval()).to.eq(0);
-            expect(await stacking.ethIntervalNumber()).to.eq(0);
+            expect(await stacking.ethOnInterval()).to.eq(0);
+            expect(await stacking.intervalNumber()).to.eq(0);
 
             // вначале не клаймится
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
             await expect(stacking.claimEth()).to.be.revertedWith('can not claim on current interval');
 
             // выжидаем 
             await Up(Seconds(604800));
 
             // клаймим
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(ethers.utils.parseEther("1.0"));
-            expect(await stacking.expectedClaimEth(acc2.address)).to.eq(ethers.utils.parseEther("2.0"));
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(ethers.utils.parseEther("1.0"));
+            expect(await stacking.ethClaimCountForAccount(acc2.address)).to.eq(ethers.utils.parseEther("2.0"));
             expect(await stacking.claimEth()).to.emit(stacking, 'OnClaimEth').withArgs(ethers.utils.parseEther("1.0"));
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(ethers.utils.parseEther("2.0"));
-            expect(await stacking.expectedClaimEth(acc2.address)).to.eq(ethers.utils.parseEther("2.0"));
+            expect(await stacking.ethClaimCountForAccount(acc2.address)).to.eq(ethers.utils.parseEther("2.0"));
 
             // второй клаймит
             expect(await stacking.connect(acc2).claimEth()).to.emit(stacking, 'OnClaimEth').withArgs(ethers.utils.parseEther("2.0"));
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(ethers.utils.parseEther("0.0"));
-            expect(await stacking.expectedClaimEth(acc2.address)).to.eq(ethers.utils.parseEther("0.0"));
+            expect(await stacking.ethClaimCountForAccount(acc2.address)).to.eq(ethers.utils.parseEther("0.0"));
 
             // после клайма нельзя клаймить повторно
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
             await expect(stacking.claimEth()).to.be.revertedWith('can not claim on current interval');
             await expect(stacking.connect(acc2).claimEth()).to.be.revertedWith('can not claim on current interval');
 
@@ -202,8 +204,8 @@ describe("stacking:", function () {
             // выжидаем
             await Up(Seconds(604800));
             // клейм второй раз
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(ethers.utils.parseEther("1.0"));
-            expect(await stacking.expectedClaimEth(acc2.address)).to.eq(ethers.utils.parseEther("2.0"));
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(ethers.utils.parseEther("1.0"));
+            expect(await stacking.ethClaimCountForAccount(acc2.address)).to.eq(ethers.utils.parseEther("2.0"));
             expect(await stacking.claimEth()).to.emit(stacking, 'OnClaimEth').withArgs(ethers.utils.parseEther("1.0"));
             expect(await stacking.connect(acc2).claimEth()).to.emit(stacking, 'OnClaimEth').withArgs(ethers.utils.parseEther("2.0"));
 
@@ -211,18 +213,20 @@ describe("stacking:", function () {
             // выжидаем
             await Up(Seconds(604800));
             // теперь по 0 клайм
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(ethers.utils.parseEther("0.0"));
-            expect(await stacking.expectedClaimEth(acc2.address)).to.eq(ethers.utils.parseEther("0.0"));
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(ethers.utils.parseEther("0.0"));
+            expect(await stacking.ethClaimCountForAccount(acc2.address)).to.eq(ethers.utils.parseEther("0.0"));
         });
     });
 
     describe("erc20", async () => {
         it("изначальная ситуация", async () => {
-            expect(await stacking.timeInterval()).to.eq(604800); // 1 неделя
-            expect(await stacking.nextErc20IntervalLapsedSeconds(erc20.address)).to.eq(604799); // до след интервала 1 неделя
-            expect(await stacking.erc20IntervalNumber(erc20.address)).to.eq(0);
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(0);
-            expect(await stacking.erc20ClaimForStack(erc20.address, 1000)).to.eq(0);
+            expect(await stacking.timeIntervalLength()).to.eq(604800); // 1 неделя
+            expect(await stacking.nextIntervalLapsedSeconds()).to.eq(604799); // до след интервала 1 неделя
+            expect(await stacking.intervalNumber()).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, stackingErc20.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForStack(1000)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForStack(1000, erc20.address)).to.eq(0);
         });
 
         it("проверка создания и вывода стака", async () => {
@@ -234,7 +238,7 @@ describe("stacking:", function () {
             // стак имеется на контракте
             expect((await stacking.getStack(owner.address))[0]).to.eq(100);
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(100);
+            expect(await stacking.totalStacks()).to.eq(100);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(100);
 
@@ -250,7 +254,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(200);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(300);
+            expect(await stacking.totalStacks()).to.eq(300);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(300);
@@ -263,7 +267,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(200);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(200);
+            expect(await stacking.totalStacks()).to.eq(200);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(100);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(0);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(200);
@@ -276,7 +280,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(50);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(50);
+            expect(await stacking.totalStacks()).to.eq(50);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(100);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(150);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(50);
@@ -289,7 +293,7 @@ describe("stacking:", function () {
             expect((await stacking.getStack(owner.address))[1]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[0]).to.eq(0);
             expect((await stacking.getStack(acc2.address))[1]).to.eq(0);
-            expect(await stacking.stacksTotalCount()).to.eq(0);
+            expect(await stacking.totalStacks()).to.eq(0);
             expect(await stackingErc20.balanceOf(owner.address)).to.eq(100);
             expect(await stackingErc20.balanceOf(acc2.address)).to.eq(200);
             expect(await stackingErc20.balanceOf(stacking.address)).to.eq(0);
@@ -299,6 +303,53 @@ describe("stacking:", function () {
             // дальше выводить нельзя
             await expect(stacking.removeStack(1)).to.be.revertedWith('not enough stack count');
             await expect(stacking.connect(acc2).removeStack(1)).to.be.revertedWith('not enough stack count');
+        });
+
+        it("проверка прредположения стака erc20", async () => {
+            // минтим себе стакинг токен
+            await stackingErc20.mint(100);
+            await stackingErc20.approve(stacking.address, 100);
+            expect(await stacking.erc20ClaimCountForAccountExpect(owner.address, erc20.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForStackExpect(100, erc20.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForNewStackExpect(100, erc20.address)).to.eq(0);
+
+            // создаем стак
+            await stacking.addStack(100);
+            expect(await stacking.erc20ClaimCountForAccountExpect(owner.address, erc20.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForStackExpect(100, erc20.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForNewStackExpect(100, erc20.address)).to.eq(0);
+
+            // минтим на стакинг
+            await erc20.mintTo(stacking.address, 100);
+            expect(await stacking.erc20ClaimCountForAccountExpect(owner.address, erc20.address)).to.eq(100);
+            expect(await stacking.erc20ClaimCountForStackExpect(100, erc20.address)).to.eq(100);
+            expect(await stacking.erc20ClaimCountForStackExpect(150, erc20.address)).to.eq(100);
+            expect(await stacking.erc20ClaimCountForNewStackExpect(100, erc20.address)).to.eq(50);
+        });
+
+        it("проверка прредположения стака eth", async () => {
+            // минтим себе стакинг токен
+            await stackingErc20.mint(100);
+            await stackingErc20.approve(stacking.address, 100);
+            expect(await stacking.ethClaimCountForAccountExpect(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForStackExpect(100)).to.eq(0);
+            expect(await stacking.ethClaimCountForNewStackExpect(100)).to.eq(0);
+
+            // создаем стак
+            await stacking.addStack(100);
+            expect(await stacking.ethClaimCountForAccountExpect(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForStackExpect(100)).to.eq(0);
+            expect(await stacking.ethClaimCountForNewStackExpect(100)).to.eq(0);
+
+            // минтим на стакинг
+            await owner.sendTransaction({
+                to: stacking.address,
+                value: 100
+            });
+            expect(await stacking.ethClaimCountForAccountExpect(owner.address)).to.eq(100);
+            expect(await stacking.ethClaimCountForStackExpect(100)).to.eq(100);
+            expect(await stacking.ethClaimCountForStackExpect(150)).to.eq(100);
+            expect(await stacking.ethClaimCountForNewStackExpect(100)).to.eq(50);
         });
 
         it("забираем токен целиком из ревард пула", async () => {
@@ -311,26 +362,28 @@ describe("stacking:", function () {
 
             // видим баланс на контракте
             expect(await erc20.balanceOf(stacking.address)).to.eq(100);
-            expect(await stacking.totalErc20ForClaimOnInterval(erc20.address)).to.eq(0);
-            expect(await stacking.erc20IntervalNumber(erc20.address)).to.eq(0);
+            expect(await stacking.erc20Total(erc20.address)).to.eq(100);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(0);
+            expect(await stacking.erc20OnInterval(erc20.address)).to.eq(0);
 
             // вначале не клаймится
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
             await expect(stacking.claimEth()).to.be.revertedWith('can not claim on current interval');
 
             // выжидаем 
-            expect(await stacking.erc20IntervalNumber(erc20.address)).to.eq(0);
+            expect(await stacking.erc20OnInterval(erc20.address)).to.eq(0);
             await Up(Seconds(604800));
-            expect(await stacking.erc20IntervalNumber(erc20.address)).to.eq(1);
+            expect(await stacking.intervalNumber()).to.eq(1);
 
             // клаймим
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(100);
-            expect(await stacking.claimErc20(erc20.address)).to.emit(stacking, 'OnClaimEth').withArgs(100);
-            expect(await stacking.erc20IntervalNumber(erc20.address)).to.eq(1);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(100);
+            expect(await stacking.claimErc20(erc20.address)).to.emit(stacking, 'OnClaimErc20').withArgs(owner.address, erc20.address, 100);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(0);
+            expect(await stacking.intervalNumber()).to.eq(1);
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(ethers.utils.parseEther("0.0"));
 
             // после клайма нельзя клаймить повторно
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(0);
             await expect(stacking.claimErc20(erc20.address)).to.be.revertedWith('can not claim on current interval');
         });
 
@@ -349,30 +402,30 @@ describe("stacking:", function () {
 
             // видим баланс токена на контракте
             expect(await erc20.balanceOf(stacking.address)).to.eq(300);
-            expect(await stacking.totalEthForClaimOnInterval()).to.eq(0);
-            expect(await stacking.erc20IntervalNumber(erc20.address)).to.eq(0);
+            expect(await stacking.ethOnInterval()).to.eq(0);
+            expect(await stacking.intervalNumber()).to.eq(0);
 
             // вначале не клаймится
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(0);
             await expect(stacking.claimEth()).to.be.revertedWith('can not claim on current interval');
 
             // выжидаем 
             await Up(Seconds(604800));
 
             // клаймим            
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(100);
-            expect(await stacking.expectedClaimErc20(erc20.address, acc2.address)).to.eq(200);         
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(100);
+            expect(await stacking.erc20ClaimCountForAccount(acc2.address, erc20.address)).to.eq(200);
             expect(await stacking.claimErc20(erc20.address)).to.emit(stacking, 'OnClaimEth').withArgs(100);
             expect(await erc20.balanceOf(stacking.address)).to.eq(200);
-            expect(await stacking.expectedClaimErc20(erc20.address, acc2.address)).to.eq(200);
+            expect(await stacking.erc20ClaimCountForAccount(acc2.address, erc20.address)).to.eq(200);
 
             // второй клаймит
             expect(await stacking.connect(acc2).claimErc20(erc20.address)).to.emit(stacking, 'OnClaimEth').withArgs(200);
             expect(await ethers.provider.getBalance(stacking.address)).to.eq(0);
-            expect(await stacking.expectedClaimErc20(erc20.address, acc2.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForAccount(acc2.address, erc20.address)).to.eq(0);
 
             // после клайма нельзя клаймить повторно
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(0);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(0);
             await expect(stacking.claimErc20(erc20.address)).to.be.revertedWith('can not claim on current interval');
             await expect(stacking.connect(acc2).claimErc20(erc20.address)).to.be.revertedWith('can not claim on current interval');
 
@@ -381,16 +434,16 @@ describe("stacking:", function () {
             // выжидаем
             await Up(Seconds(604800));
             // клейм второй раз
-            expect(await stacking.expectedClaimErc20(erc20.address, owner.address)).to.eq(100);
-            expect(await stacking.expectedClaimErc20(erc20.address, acc2.address)).to.eq(200);
+            expect(await stacking.erc20ClaimCountForAccount(owner.address, erc20.address)).to.eq(100);
+            expect(await stacking.erc20ClaimCountForAccount(acc2.address, erc20.address)).to.eq(200);
             expect(await stacking.claimErc20(erc20.address)).to.emit(stacking, 'OnClaimEth').withArgs(100);
             expect(await stacking.connect(acc2).claimErc20(erc20.address)).to.emit(stacking, 'OnClaimEth').withArgs(200);
 
             // выжидаем
             await Up(Seconds(604800));
             // теперь по 0 клайм
-            expect(await stacking.expectedClaimEth(owner.address)).to.eq(0);
-            expect(await stacking.expectedClaimEth(acc2.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(owner.address)).to.eq(0);
+            expect(await stacking.ethClaimCountForAccount(acc2.address)).to.eq(0);
         });
     });
 });
