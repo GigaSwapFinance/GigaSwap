@@ -1,43 +1,31 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.17;
 
+import 'hardhat/console.sol';
+
+import './IFarming.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
-struct Stack {
-    uint256 count;
-    uint256 creationInterval;
+struct Erc20Info {
+    uint256 intervalNumber; // the last known claim interval (uses for update totalCountForClaim)
+    uint256 totalCountOnInterval;
 }
 
-contract Farming {
+contract Farming is IFarming {
     using SafeERC20 for IERC20;
-    // stacking contract
-    IERC20 _stackingContract;
-    // user stacks
-    mapping(address => Stack) _stacks;
-    uint256 _stacksTotalCount;
-    // reward interval time
-    uint256 constant _timeInterval = 1 weeks;
-    // next interval times
-    uint256 _nextEthIntervalTime;
-    mapping(address => uint256) _nextErc20IntervalTime;
-    // current interval number
-    uint256 _ethIntervalNumber;
-    mapping(address => uint256) _erc20IntervalNumber;
-    // current interval rewards
-    uint256 _totalEthForClaimOnInterval;
-    mapping(address => uint256) _totalErc20ForClaimOnInterval;
-    // users claim intervals
-    mapping(address => uint256) _ethClaimIntervals;
-    mapping(address => mapping(address => uint256)) _erc20ClaimIntervals; // [account][erc20] cache
+    IERC20 _stackingContract; // erc20 contract for stacking
+    mapping(address => Stack) _stacks; // stacks by users
+    uint256 constant _timeInterval = 1 weeks; // reward interval time length
+    uint256 _nextIntervalTime; // next interval time
+    uint256 _intervalNumber; // current interval number
+    uint256 _totalStacksOnInterval; // current interval total stacks count
+    uint256 _totalEthOnInterval; // current interval eth rewards
+    mapping(address => Erc20Info) _erc20nfos; // information about each erc20 (at current interval)
+    mapping(address => uint256) _ethClaimIntervals; // users eth claim intervals
+    mapping(address => mapping(address => uint256)) _erc20ClaimIntervals; // [account][erc20] cache of last erc20 claim intervals for accounts
 
     uint256 _creationTime;
-
-    // existing events
-    event OnAddStack(address indexed account, Stack stack, uint256 count);
-    event OnRemoveStack(address indexed account, Stack stack, uint256 count);
-    event OnClaimEth(address indexed account, Stack stack, uint256 count);
-    event OnClaimErc20(address indexed account, Stack stack, uint256 count);
 
     constructor(address stackingContract) {
         _stackingContract = IERC20(stackingContract);
@@ -46,107 +34,103 @@ contract Farming {
 
     receive() external payable {}
 
+    function timeIntervalLength() external pure returns (uint256) {
+        return _timeInterval;
+    }
+
+    function intervalNumber() external view returns (uint256) {
+        if (block.timestamp >= this.nextIntervalTime())
+            return _intervalNumber + 1;
+        return _intervalNumber;
+    }
+
+    function nextIntervalTime() external view returns (uint256) {
+        if (_intervalNumber == 0) return _creationTime + _timeInterval;
+        return _nextIntervalTime;
+    }
+
+    function nextIntervalLapsedSeconds() external view returns (uint256) {
+        if (block.timestamp >= this.nextIntervalTime()) return 0;
+        return (this.nextIntervalTime() - block.timestamp) / (1 seconds);
+    }
+
     function getStack(address account) external view returns (Stack memory) {
         return _stacks[account];
     }
 
     function addStack(uint256 count) external returns (Stack memory) {
+        _nextInterval();
         uint256 lastCount = _stackingContract.balanceOf(address(this));
         _stackingContract.transferFrom(msg.sender, address(this), count);
         uint256 added = _stackingContract.balanceOf(address(this)) - lastCount;
         _stacks[msg.sender].count += added;
-        _stacks[msg.sender].creationInterval = _ethIntervalNumber;
-        _stacksTotalCount += added;
+        _stacks[msg.sender].creationInterval = _intervalNumber;
         emit OnAddStack(msg.sender, _stacks[msg.sender], added);
         return _stacks[msg.sender];
     }
 
+    function addFullStack() external returns (Stack memory) {
+        return this.addStack(_stackingContract.balanceOf(msg.sender));
+    }
+
     function removeStack(uint256 count) external returns (Stack memory) {
+        _nextInterval();
         require(_stacks[msg.sender].count >= count, 'not enough stack count');
         uint256 lastCount = _stackingContract.balanceOf(address(this));
         _stackingContract.transfer(msg.sender, count);
         uint256 removed = lastCount -
             _stackingContract.balanceOf(address(this));
         _stacks[msg.sender].count -= removed;
-        _stacksTotalCount -= removed;
         emit OnRemoveStack(msg.sender, _stacks[msg.sender], removed);
         return _stacks[msg.sender];
     }
 
-    function ethIntervalNumber() external view returns (uint256) {
-        if (block.timestamp >= this.nextEthIntervalTime())
-            return _ethIntervalNumber + 1;
-        return _ethIntervalNumber;
+    function removeFullStack() external returns (Stack memory) {
+        return this.removeStack(_stacks[msg.sender].count);
     }
 
-    function erc20IntervalNumber(address erc20)
-        external
-        view
-        returns (uint256)
-    {
-        if (block.timestamp >= this.nextErc20IntervalTime(erc20))
-            return _erc20IntervalNumber[erc20] + 1;
-        return _erc20IntervalNumber[erc20];
+    function totalStacks() external view returns (uint256) {
+        return _stackingContract.balanceOf(address(this));
     }
 
-    function timeInterval() external pure returns (uint256) {
-        return _timeInterval;
+    function totalStacksOnInterval() external view returns (uint256) {
+        if (this.intervalNumber() <= _intervalNumber)
+            return _totalStacksOnInterval;
+        return _stackingContract.balanceOf(address(this));
     }
 
-    function nextEthIntervalTime() external view returns (uint256) {
-        if (_ethIntervalNumber == 0) return _creationTime + _timeInterval;
-        return _nextEthIntervalTime;
+    function ethTotal() external view returns (uint256) {
+        return address(this).balance;
     }
 
-    function nextErc20IntervalTime(address erc20)
-        external
-        view
-        returns (uint256)
-    {
-        if (_erc20IntervalNumber[erc20] == 0)
-            return _creationTime + _timeInterval;
-        return _nextErc20IntervalTime[erc20];
+    function erc20Total(address erc20) external view returns (uint256) {
+        return IERC20(erc20).balanceOf(address(this));
     }
 
-    function nextEthIntervalLapsedSeconds() external view returns (uint256) {
-        if (block.timestamp >= this.nextEthIntervalTime()) return 0;
-        return (this.nextEthIntervalTime() - block.timestamp) / (1 seconds);
+    function ethOnInterval() external view returns (uint256) {
+        if (this.intervalNumber() <= _intervalNumber)
+            return _totalEthOnInterval;
+        return address(this).balance;
     }
 
-    function nextErc20IntervalLapsedSeconds(address erc20)
-        external
-        view
-        returns (uint256)
-    {
-        if (block.timestamp >= this.nextErc20IntervalTime(erc20)) return 0;
+    function erc20OnInterval(address erc20) external view returns (uint256) {
         return
-            (this.nextErc20IntervalTime(erc20) - block.timestamp) / (1 seconds);
+            _expectedErc20Info(erc20, this.intervalNumber())
+                .totalCountOnInterval;
     }
 
-    function stacksTotalCount() external view returns (uint256) {
-        return _stacksTotalCount;
-    }
-
-    function totalEthForClaimOnInterval() external view returns (uint256) {
-        if (block.timestamp >= this.nextEthIntervalTime()) {
-            return address(this).balance;
-        }
-        return _totalEthForClaimOnInterval;
-    }
-
-    function totalErc20ForClaimOnInterval(address erc20)
-        external
+    function _expectedErc20Info(address erc20, uint256 expectedIntervalNumber)
+        internal
         view
-        returns (uint256)
+        returns (Erc20Info memory)
     {
-        if (block.timestamp >= this.nextErc20IntervalTime(erc20)) {
-            return IERC20(erc20).balanceOf(address(this));
-        }
-        return _totalErc20ForClaimOnInterval[erc20];
+        Erc20Info memory info = _erc20nfos[erc20];
+        if (expectedIntervalNumber <= info.intervalNumber) return info;
+        info.intervalNumber = expectedIntervalNumber;
+        info.totalCountOnInterval = IERC20(erc20).balanceOf(address(this));
+        return info;
     }
 
-    /// @dev the interval from which an account can claim ethereum rewards
-    /// sets to next interval if add stack or claim eth
     function ethClaimIntervalForAccount(address account)
         external
         view
@@ -158,9 +142,7 @@ contract Farming {
         return interval + 1;
     }
 
-    /// @dev the interval from which an account can claim erc20 rewards
-    /// sets to next interval if add stack or claim eth
-    function erc20ClaimIntervalForAccount(address erc20, address account)
+    function erc20ClaimIntervalForAccount(address account, address erc20)
         external
         view
         returns (uint256)
@@ -171,88 +153,131 @@ contract Farming {
         return interval + 1;
     }
 
-    function claimEth() external {
-        _nextEthInterval();
-        require(
-            this.ethClaimIntervalForAccount(msg.sender) <= _ethIntervalNumber,
-            'can not claim on current interval'
-        );
-        _ethClaimIntervals[msg.sender] = _ethIntervalNumber;
-        uint256 claimCount = this.ethClaimForStack(_stacks[msg.sender].count);
-        require(claimCount > 0, 'notging to claim');
-        (bool sent, ) = payable(msg.sender).call{ value: claimCount }('');
-        require(sent, 'sent ether error: ether is not sent');
-        emit OnClaimEth(msg.sender, _stacks[msg.sender], claimCount);
-    }
-
-    function claimErc20(address erc20) external {
-        _nextErc20Interval(erc20);
-        require(
-            this.erc20ClaimIntervalForAccount(erc20, msg.sender) <=
-                _erc20IntervalNumber[erc20],
-            'can not claim on current interval'
-        );
-        _erc20ClaimIntervals[msg.sender][erc20] = _erc20IntervalNumber[erc20];
-        uint256 claimCount = this.erc20ClaimForStack(
-            erc20,
-            _stacks[msg.sender].count
-        );
-        require(claimCount > 0, 'notging to claim');
-        IERC20(erc20).safeTransfer(msg.sender, claimCount);
-        emit OnClaimErc20(msg.sender, _stacks[msg.sender], claimCount);
-    }
-
-    function expectedClaimEth(address account) external view returns (uint256) {
-        // get expected interval number
-        uint256 expectedIntervalNumber = _ethIntervalNumber;
-        uint256 expectedTotalForClaimOnInterval = _totalEthForClaimOnInterval;
-        if (block.timestamp >= this.nextEthIntervalTime()) {
-            ++expectedIntervalNumber;
-            expectedTotalForClaimOnInterval = address(this).balance;
-        }
-        // check conditions
-        if (this.ethClaimIntervalForAccount(account) > expectedIntervalNumber)
+    function ethClaimCountForAccount(address account)
+        external
+        view
+        returns (uint256)
+    {
+        if (this.ethClaimIntervalForAccount(account) > this.intervalNumber())
             return 0;
-        // get expected count
-        return
-            (_stacks[account].count * expectedTotalForClaimOnInterval) /
-            _stacksTotalCount;
+        return this.ethClaimCountForStack(_stacks[account].count);
     }
 
-    function expectedClaimErc20(address erc20, address account)
+    function erc20ClaimCountForAccount(address account, address erc20)
         external
         view
         returns (uint256)
     {
-        // get expected interval number
-        uint256 expectedIntervalNumber = _erc20IntervalNumber[erc20];
-        uint256 expectedTotalForClaimOnInterval = _totalErc20ForClaimOnInterval[
-            erc20
-        ];
-        if (block.timestamp >= this.nextErc20IntervalTime(erc20)) {
-            ++expectedIntervalNumber;
-            expectedTotalForClaimOnInterval = IERC20(erc20).balanceOf(
-                address(this)
-            );
-        }
-        // check conditions
         if (
-            this.erc20ClaimIntervalForAccount(erc20, account) >
-            expectedIntervalNumber
+            this.erc20ClaimIntervalForAccount(account, erc20) >
+            this.intervalNumber()
         ) return 0;
-        // get expected count
-        return
-            (_stacks[account].count * expectedTotalForClaimOnInterval) /
-            _stacksTotalCount;
+        return this.erc20ClaimCountForStack(_stacks[account].count, erc20);
     }
 
-    function ethClaimForStack(uint256 stackCount)
+    function ethClaimCountForAccountExpect(address account)
         external
         view
         returns (uint256)
     {
-        if (_stacksTotalCount == 0) return 0;
-        return (stackCount * _totalEthForClaimOnInterval) / _stacksTotalCount;
+        return this.ethClaimCountForStackExpect(_stacks[account].count);
+    }
+
+    function erc20ClaimCountForAccountExpect(address account, address erc20)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            this.erc20ClaimCountForStackExpect(_stacks[account].count, erc20);
+    }
+
+    function ethClaimCountForStackExpect(uint256 stackSize)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            _claimCountForStack(
+                stackSize,
+                this.totalStacks(),
+                address(this).balance
+            );
+    }
+
+    function erc20ClaimCountForStackExpect(uint256 stackSize, address erc20)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            _claimCountForStack(
+                stackSize,
+                this.totalStacks(),
+                IERC20(erc20).balanceOf(address(this))
+            );
+    }
+
+    function ethClaimCountForNewStackExpect(uint256 stackSize)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            _claimCountForStack(
+                stackSize,
+                this.totalStacks() + stackSize,
+                address(this).balance
+            );
+    }
+
+    function erc20ClaimCountForNewStackExpect(uint256 stackSize, address erc20)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            _claimCountForStack(
+                stackSize,
+                this.totalStacks() + stackSize,
+                IERC20(erc20).balanceOf(address(this))
+            );
+    }
+
+    function ethClaimCountForStack(uint256 stackSize)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            _claimCountForStack(
+                stackSize,
+                this.totalStacksOnInterval(),
+                this.ethOnInterval()
+            );
+    }
+
+    function erc20ClaimCountForStack(uint256 stackSize, address erc20)
+        external
+        view
+        returns (uint256)
+    {
+        return
+            _claimCountForStack(
+                stackSize,
+                this.totalStacksOnInterval(),
+                this.erc20OnInterval(erc20)
+            );
+    }
+
+    function _claimCountForStack(
+        uint256 stackCount,
+        uint256 totalStacksOnInterwal,
+        uint256 assetCountOnInterwal
+    ) internal pure returns (uint256) {
+        if (stackCount > totalStacksOnInterwal) return assetCountOnInterwal;
+        if (totalStacksOnInterwal == 0) return 0;
+        return (stackCount * assetCountOnInterwal) / totalStacksOnInterwal;
     }
 
     function erc20ClaimForStack(address erc20, uint256 stackCount)
@@ -260,29 +285,65 @@ contract Farming {
         view
         returns (uint256)
     {
-        if (_stacksTotalCount == 0) return 0;
         return
-            (stackCount * _totalErc20ForClaimOnInterval[erc20]) /
-            _stacksTotalCount;
+            _claimCountForStack(
+                stackCount,
+                this.totalStacksOnInterval(),
+                this.erc20OnInterval(erc20)
+            );
     }
 
-    function getErc20Reward(address token) external {}
-
-    function _nextEthInterval() internal returns (bool) {
-        if (block.timestamp < this.nextEthIntervalTime()) return false;
-        _nextEthIntervalTime = block.timestamp + _timeInterval;
-        _totalEthForClaimOnInterval = address(this).balance;
-        ++_ethIntervalNumber;
+    function _nextInterval() internal returns (bool) {
+        if (block.timestamp < this.nextIntervalTime()) return false;
+        _totalStacksOnInterval = this.totalStacks();
+        _nextIntervalTime = block.timestamp + _timeInterval;
+        _totalEthOnInterval = address(this).balance;
+        ++_intervalNumber;
+        emit OnNextInterval(_intervalNumber);
         return true;
     }
 
-    function _nextErc20Interval(address erc20) internal returns (bool) {
-        if (block.timestamp < this.nextErc20IntervalTime(erc20)) return false;
-        _nextErc20IntervalTime[erc20] = block.timestamp + _timeInterval;
-        _totalErc20ForClaimOnInterval[erc20] = IERC20(erc20).balanceOf(
-            address(this)
+    function claimEth() external {
+        _nextInterval();
+        require(
+            this.ethClaimIntervalForAccount(msg.sender) <= _intervalNumber,
+            'can not claim on current interval'
         );
-        ++_erc20IntervalNumber[erc20];
-        return true;
+        _ethClaimIntervals[msg.sender] = _intervalNumber;
+        uint256 claimCount = _claimCountForStack(
+            _stacks[msg.sender].count,
+            _totalStacksOnInterval,
+            _totalEthOnInterval
+        );
+        require(claimCount > 0, 'notging to claim');
+        (bool sent, ) = payable(msg.sender).call{ value: claimCount }('');
+        require(sent, 'sent ether error: ether is not sent');
+        emit OnClaimEth(msg.sender, _stacks[msg.sender], claimCount);
+    }
+
+    function claimErc20(address erc20) external {
+        // move interval
+        _nextInterval();
+        // move erc20 to interval
+        Erc20Info storage info = _erc20nfos[erc20];
+        if (_intervalNumber > info.intervalNumber) {
+            info.intervalNumber = _intervalNumber;
+            info.totalCountOnInterval = IERC20(erc20).balanceOf(address(this));
+        }
+
+        require(
+            this.erc20ClaimIntervalForAccount(msg.sender, erc20) <=
+                _intervalNumber,
+            'can not claim on current interval'
+        );
+        _erc20ClaimIntervals[msg.sender][erc20] = _intervalNumber;
+        uint256 claimCount = _claimCountForStack(
+            _stacks[msg.sender].count,
+            _totalStacksOnInterval,
+            info.totalCountOnInterval
+        );
+        require(claimCount > 0, 'nothing to claim');
+        IERC20(erc20).safeTransfer(msg.sender, claimCount);
+        emit OnClaimErc20(msg.sender, _stacks[msg.sender], claimCount);
     }
 }
