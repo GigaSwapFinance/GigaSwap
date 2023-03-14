@@ -6,17 +6,18 @@ import 'hardhat/console.sol';
 import './IFarming.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import 'contracts/lib/ownable/Ownable.sol';
 
 struct Erc20Info {
     uint256 intervalNumber; // the last known claim interval (uses for update totalCountForClaim)
     uint256 totalCountOnInterval;
 }
 
-contract Farming is IFarming {
+contract Farming is IFarming, Ownable {
     using SafeERC20 for IERC20;
     IERC20 _stackingContract; // erc20 contract for stacking
     mapping(address => Stack) _stacks; // stacks by users
-    uint256 constant _timeInterval = 1 weeks; // reward interval time length
+    uint256 _timeInterval = 24 hours; // reward interval time length
     uint256 _nextIntervalTime; // next interval time
     uint256 _intervalNumber; // current interval number
     uint256 _totalStacksOnInterval; // current interval total stacks count
@@ -25,17 +26,21 @@ contract Farming is IFarming {
     mapping(address => uint256) _ethClaimIntervals; // users eth claim intervals
     mapping(address => mapping(address => uint256)) _erc20ClaimIntervals; // [account][erc20] cache of last erc20 claim intervals for accounts
 
-    uint256 _creationTime;
-
     constructor(address stackingContract) {
         _stackingContract = IERC20(stackingContract);
-        _creationTime = block.timestamp;
+        _nextIntervalTime = block.timestamp + _timeInterval;
     }
 
     receive() external payable {}
 
-    function timeIntervalLength() external pure returns (uint256) {
+    function timeIntervalLength() external view returns (uint256) {
         return _timeInterval;
+    }
+
+    function setTimeIntervalLengthHours(
+        uint256 intervalHours
+    ) external onlyOwner {
+        _timeInterval = intervalHours * 1 hours;
     }
 
     function intervalNumber() external view returns (uint256) {
@@ -45,7 +50,6 @@ contract Farming is IFarming {
     }
 
     function nextIntervalTime() external view returns (uint256) {
-        if (_intervalNumber == 0) return _creationTime + _timeInterval;
         return _nextIntervalTime;
     }
 
@@ -114,16 +118,17 @@ contract Farming is IFarming {
     }
 
     function erc20OnInterval(address erc20) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         return
             _expectedErc20Info(erc20, this.intervalNumber())
                 .totalCountOnInterval;
     }
 
-    function _expectedErc20Info(address erc20, uint256 expectedIntervalNumber)
-        internal
-        view
-        returns (Erc20Info memory)
-    {
+    function _expectedErc20Info(
+        address erc20,
+        uint256 expectedIntervalNumber
+    ) internal view returns (Erc20Info memory) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         Erc20Info memory info = _erc20nfos[erc20];
         if (expectedIntervalNumber <= info.intervalNumber) return info;
         info.intervalNumber = expectedIntervalNumber;
@@ -131,43 +136,39 @@ contract Farming is IFarming {
         return info;
     }
 
-    function ethClaimIntervalForAccount(address account)
-        external
-        view
-        returns (uint256)
-    {
+    function ethClaimIntervalForAccount(
+        address account
+    ) external view returns (uint256) {
         uint256 interval = _ethClaimIntervals[account];
         if (_stacks[account].creationInterval > interval)
             interval = _stacks[account].creationInterval;
         return interval + 1;
     }
 
-    function erc20ClaimIntervalForAccount(address account, address erc20)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimIntervalForAccount(
+        address account,
+        address erc20
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         uint256 interval = _erc20ClaimIntervals[account][erc20];
         if (_stacks[account].creationInterval > interval)
             interval = _stacks[account].creationInterval;
         return interval + 1;
     }
 
-    function ethClaimCountForAccount(address account)
-        external
-        view
-        returns (uint256)
-    {
+    function ethClaimCountForAccount(
+        address account
+    ) external view returns (uint256) {
         if (this.ethClaimIntervalForAccount(account) > this.intervalNumber())
             return 0;
         return this.ethClaimCountForStack(_stacks[account].count);
     }
 
-    function erc20ClaimCountForAccount(address account, address erc20)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimCountForAccount(
+        address account,
+        address erc20
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         if (
             this.erc20ClaimIntervalForAccount(account, erc20) >
             this.intervalNumber()
@@ -175,28 +176,24 @@ contract Farming is IFarming {
         return this.erc20ClaimCountForStack(_stacks[account].count, erc20);
     }
 
-    function ethClaimCountForAccountExpect(address account)
-        external
-        view
-        returns (uint256)
-    {
+    function ethClaimCountForAccountExpect(
+        address account
+    ) external view returns (uint256) {
         return this.ethClaimCountForStackExpect(_stacks[account].count);
     }
 
-    function erc20ClaimCountForAccountExpect(address account, address erc20)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimCountForAccountExpect(
+        address account,
+        address erc20
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         return
             this.erc20ClaimCountForStackExpect(_stacks[account].count, erc20);
     }
 
-    function ethClaimCountForStackExpect(uint256 stackSize)
-        external
-        view
-        returns (uint256)
-    {
+    function ethClaimCountForStackExpect(
+        uint256 stackSize
+    ) external view returns (uint256) {
         return
             _claimCountForStack(
                 stackSize,
@@ -205,11 +202,11 @@ contract Farming is IFarming {
             );
     }
 
-    function erc20ClaimCountForStackExpect(uint256 stackSize, address erc20)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimCountForStackExpect(
+        uint256 stackSize,
+        address erc20
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         return
             _claimCountForStack(
                 stackSize,
@@ -218,11 +215,9 @@ contract Farming is IFarming {
             );
     }
 
-    function ethClaimCountForNewStackExpect(uint256 stackSize)
-        external
-        view
-        returns (uint256)
-    {
+    function ethClaimCountForNewStackExpect(
+        uint256 stackSize
+    ) external view returns (uint256) {
         return
             _claimCountForStack(
                 stackSize,
@@ -231,11 +226,11 @@ contract Farming is IFarming {
             );
     }
 
-    function erc20ClaimCountForNewStackExpect(uint256 stackSize, address erc20)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimCountForNewStackExpect(
+        uint256 stackSize,
+        address erc20
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         return
             _claimCountForStack(
                 stackSize,
@@ -244,11 +239,9 @@ contract Farming is IFarming {
             );
     }
 
-    function ethClaimCountForStack(uint256 stackSize)
-        external
-        view
-        returns (uint256)
-    {
+    function ethClaimCountForStack(
+        uint256 stackSize
+    ) external view returns (uint256) {
         return
             _claimCountForStack(
                 stackSize,
@@ -257,11 +250,11 @@ contract Farming is IFarming {
             );
     }
 
-    function erc20ClaimCountForStack(uint256 stackSize, address erc20)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimCountForStack(
+        uint256 stackSize,
+        address erc20
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         return
             _claimCountForStack(
                 stackSize,
@@ -280,11 +273,11 @@ contract Farming is IFarming {
         return (stackCount * assetCountOnInterwal) / totalStacksOnInterwal;
     }
 
-    function erc20ClaimForStack(address erc20, uint256 stackCount)
-        external
-        view
-        returns (uint256)
-    {
+    function erc20ClaimForStack(
+        address erc20,
+        uint256 stackCount
+    ) external view returns (uint256) {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         return
             _claimCountForStack(
                 stackCount,
@@ -296,6 +289,7 @@ contract Farming is IFarming {
     function _nextInterval() internal returns (bool) {
         if (block.timestamp < this.nextIntervalTime()) return false;
         _totalStacksOnInterval = this.totalStacks();
+        if (_intervalNumber == 0) _timeInterval = 21 days;
         _nextIntervalTime = block.timestamp + _timeInterval;
         _totalEthOnInterval = address(this).balance;
         ++_intervalNumber;
@@ -322,6 +316,7 @@ contract Farming is IFarming {
     }
 
     function claimErc20(address erc20) external {
+        _checkCanNotBeClaimedStackingErc20(erc20);
         // move interval
         _nextInterval();
         // move erc20 to interval
@@ -345,5 +340,12 @@ contract Farming is IFarming {
         require(claimCount > 0, 'nothing to claim');
         IERC20(erc20).safeTransfer(msg.sender, claimCount);
         emit OnClaimErc20(msg.sender, _stacks[msg.sender], claimCount);
+    }
+
+    function _checkCanNotBeClaimedStackingErc20(address erc20) internal view {
+        require(
+            erc20 != address(_stackingContract),
+            'staking tokens can not be claimed'
+        );
     }
 }

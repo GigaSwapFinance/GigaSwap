@@ -19,7 +19,11 @@ interface IFarming {
     event OnNextInterval(uint256 interval);
 
     /// @dev the intervals time length
-    function timeIntervalLength() external pure returns (uint256);
+    function timeIntervalLength() external view returns (uint256);
+
+    /// @dev sets time interval number in hours
+    /// onlyOwner
+    function setTimeIntervalLengthHours(uint256 intervalHours) external;
 
     /// @dev current interval number
     function intervalNumber() external view returns (uint256);
@@ -65,77 +69,71 @@ interface IFarming {
 
     /// @dev the interval from which an account can claim ethereum rewards
     /// sets to next interval if add stack or claim eth
-    function ethClaimIntervalForAccount(address account)
-        external
-        view
-        returns (uint256);
+    function ethClaimIntervalForAccount(
+        address account
+    ) external view returns (uint256);
 
     /// @dev the interval from which an account can claim erc20 rewards
     /// sets to next interval if add stack or claim eth
-    function erc20ClaimIntervalForAccount(address account, address erc20)
-        external
-        view
-        returns (uint256);
+    function erc20ClaimIntervalForAccount(
+        address account,
+        address erc20
+    ) external view returns (uint256);
 
     /// @dev returns eth that would be claimed by account at current time
-    function ethClaimCountForAccount(address account)
-        external
-        view
-        returns (uint256);
+    function ethClaimCountForAccount(
+        address account
+    ) external view returns (uint256);
 
     /// @dev returns erc20 that would be claimed by account at current time
-    function erc20ClaimCountForAccount(address account, address erc20)
-        external
-        view
-        returns (uint256);
+    function erc20ClaimCountForAccount(
+        address account,
+        address erc20
+    ) external view returns (uint256);
 
     /// @dev returns expected eth that would be claimed by account at current time (on all intervals)
-    function ethClaimCountForAccountExpect(address account)
-        external
-        view
-        returns (uint256);
+    function ethClaimCountForAccountExpect(
+        address account
+    ) external view returns (uint256);
 
     /// @dev returns expected erc20 that would be claimed by account at current time (on all intervals)
-    function erc20ClaimCountForAccountExpect(address account, address erc20)
-        external
-        view
-        returns (uint256);
+    function erc20ClaimCountForAccountExpect(
+        address account,
+        address erc20
+    ) external view returns (uint256);
 
     /// @dev returns expected eth claim count for stack size at current time (on all intervals)
-    function ethClaimCountForStackExpect(uint256 stackSize)
-        external
-        view
-        returns (uint256);
+    function ethClaimCountForStackExpect(
+        uint256 stackSize
+    ) external view returns (uint256);
 
     /// @dev returns expected erc20 that would be claimed for stack size at current time (on all intervals)
-    function erc20ClaimCountForStackExpect(uint256 stackSize, address erc20)
-        external
-        view
-        returns (uint256);
+    function erc20ClaimCountForStackExpect(
+        uint256 stackSize,
+        address erc20
+    ) external view returns (uint256);
 
     /// @dev returns expected eth claim count for new stack size at current time (on all intervals)
-    function ethClaimCountForNewStackExpect(uint256 stackSize)
-        external
-        view
-        returns (uint256);
+    function ethClaimCountForNewStackExpect(
+        uint256 stackSize
+    ) external view returns (uint256);
 
     /// @dev returns expected erc20 that would be claimed for new stack size at current time (on all intervals)
-    function erc20ClaimCountForNewStackExpect(uint256 stackSize, address erc20)
-        external
-        view
-        returns (uint256);
+    function erc20ClaimCountForNewStackExpect(
+        uint256 stackSize,
+        address erc20
+    ) external view returns (uint256);
 
     /// @dev returns eth claim count for stack on interval
-    function ethClaimCountForStack(uint256 stackSize)
-        external
-        view
-        returns (uint256);
+    function ethClaimCountForStack(
+        uint256 stackSize
+    ) external view returns (uint256);
 
     /// @dev returns erc20 that would be claimed for stack size at current time
-    function erc20ClaimCountForStack(uint256 stackSize, address erc20)
-        external
-        view
-        returns (uint256);
+    function erc20ClaimCountForStack(
+        uint256 stackSize,
+        address erc20
+    ) external view returns (uint256);
 
     /// @dev claims ethereum
     function claimEth() external;
