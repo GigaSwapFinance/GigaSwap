@@ -56,10 +56,10 @@ interface IFarming {
     function totalStacksOnInterval() external view returns (uint256);
 
     /// @dev returns total eth for rewards
-    function ethTotal() external view returns (uint256);
+    function ethTotalForRewards() external view returns (uint256);
 
     /// @dev returns total erc20 for rewards
-    function erc20Total(address erc20) external view returns (uint256);
+    function erc20TotalForRewards(address erc20) external view returns (uint256);
 
     /// @dev returns total eth at current interval
     function ethOnInterval() external view returns (uint256);
@@ -140,4 +140,7 @@ interface IFarming {
 
     /// @dev claims certain erc20
     function claimErc20(address erc20) external;
+
+    /// @dev batch claim ethereum and or erc20 tokens
+    function batchClaim(bool claimEth, address[] calldata tokens) external;
 }

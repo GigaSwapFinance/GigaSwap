@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.17;
 
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+//import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import 'contracts/lib/erc20/Erc20Min.sol';
 import './IgWETH.sol';
 
-contract gWETH is ERC20, IgWETH {
+//contract gWETH is ERC20, IgWETH {
+ contract gWETH is Erc20Min, IgWETH { 
     mapping(address => bool) _withoutAllowance;
     address _owner;
 
-    constructor() ERC20('GigaSwap Wrapped Ethereum', 'gWETH') {
+    constructor() Erc20Min('GigaSwap Wrapped Ethereum', 'gWETH') {
         _owner = msg.sender;
     }
 
