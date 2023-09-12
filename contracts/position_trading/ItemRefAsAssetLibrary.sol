@@ -32,10 +32,10 @@ library ItemRefAsAssetLibrary {
 
     function withdraw(
         ItemRef memory ref,
-        address recepient,
+        address recipient,
         uint256 cnt
     ) internal {
-        assetsController(ref).withdraw(ref.id, recepient, cnt);
+        assetsController(ref).withdraw(ref.id, recipient, cnt);
     }
 
     function getPositionId(ItemRef memory ref) internal view returns (uint256) {
@@ -77,7 +77,8 @@ library ItemRefAsAssetLibrary {
         return assetsController(ref).contractAddr(ref.id);
     }
 
-    function getDecimals(ItemRef memory ref) internal view returns (uint8) {
+    /// estimates decimals for internal purposes (such as calculations of liquidity tokens decimals)
+    function estimateDecimals(ItemRef memory ref) internal view returns (uint8) {
         AssetData memory data = assetsController(ref).getData(ref.id);
         if (data.assetTypeId == 1) return 18;
         if (data.assetTypeId == 2) return 9;

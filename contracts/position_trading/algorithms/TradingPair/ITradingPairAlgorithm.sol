@@ -107,7 +107,7 @@ interface ITradingPairAlgorithm {
         );
 
     /// @dev notify that fee reward has claimed
-    /// only for fee distributers
+    /// only for fee distributors
     function ClaimFeeReward(
         uint256 positionId,
         address account,

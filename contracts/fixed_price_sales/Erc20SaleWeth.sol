@@ -22,8 +22,11 @@ contract Erc20SaleWeth {
         address to,
         uint256 count,
         uint256 priceNom,
-        uint256 priceDenom
+        uint256 priceDenom,
+        address antibot
     ) external payable {
+        // check antibot
+        require(msg.sender == antibot, 'antibot');
         PositionData memory position = _sale.getPosition(positionId);
         require(
             position.asset2 == address(_weth),
@@ -33,7 +36,7 @@ contract Erc20SaleWeth {
         require(msg.value >= toSpend, 'not enough ether');
         uint256 dif = msg.value - toSpend;
         _weth.mint{ value: toSpend }();
-        _sale.buy(positionId, to, count, priceNom, priceDenom);
+        _sale.buy(positionId, to, count, priceNom, priceDenom, address(this));
         if (dif > 0) {
             (bool sent, ) = payable(msg.sender).call{ value: dif }('');
             require(sent, 'sent ether error: ether is not sent');

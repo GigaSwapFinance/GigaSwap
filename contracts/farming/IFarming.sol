@@ -28,10 +28,10 @@ interface IFarming {
     /// @dev current interval number
     function intervalNumber() external view returns (uint256);
 
-    /// @dev time of next interval. Can be less then current time if if next interwal is already started, but no one write function has been at new interval
+    /// @dev time of next interval. Can be less then current time if if next Interval is already started, but no one write function has been at new interval
     function nextIntervalTime() external view returns (uint256);
 
-    /// @dev next interval lapsed seconds or 0 if next interwal is already started, but no one write function has been at new interval
+    /// @dev next interval lapsed seconds or 0 if next Interval is already started, but no one write function has been at new interval
     function nextIntervalLapsedSeconds() external view returns (uint256);
 
     /// @dev returns the accounts stack
@@ -43,7 +43,7 @@ interface IFarming {
     /// @dev adds the caller all fee tokens to stack
     function addFullStack() external returns (Stack memory);
 
-    /// @dev reves the accounts stack
+    /// @dev removes the accounts stack
     function removeStack(uint256 count) external returns (Stack memory);
 
     /// @dev removes the caller all fee tokens from stack

@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 interface IDealPointsController {
     receive() external payable;
 
-    /// @dev returns type id of dealpoints
+    /// @dev returns type id of deal points
     /// 1 - eth
     /// 2 - erc20
     /// 3 erc721 item
@@ -50,7 +50,7 @@ interface IDealPointsController {
     /// @dev if true, than deal is swapped
     function isSwapped(uint256 pointId) external view returns (bool);
 
-    /// @dev if true, than point is executed and can be swaped
+    /// @dev if true, than point is executed and can be swapped
     function isExecuted(uint256 pointId) external view returns (bool);
 
     /// @dev executes the point, by using address

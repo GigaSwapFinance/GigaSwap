@@ -124,7 +124,7 @@ abstract contract AssetsControllerBase is IAssetsController {
 
     function withdraw(
         uint256 assetId,
-        address recepient,
+        address recipient,
         uint256 count
     ) external {
         require(_counts[assetId] >= count, 'not enough asset balance');
@@ -134,13 +134,13 @@ abstract contract AssetsControllerBase is IAssetsController {
             'only for positions controller or algorithm'
         );
 
-        if (recepient != address(this)) _withdraw(assetId, recepient, count);
+        if (recipient != address(this)) _withdraw(assetId, recipient, count);
         _counts[assetId] -= count;
     }
 
     function _withdraw(
         uint256 assetId,
-        address recepient,
+        address recipient,
         uint256 count
     ) internal virtual;
 

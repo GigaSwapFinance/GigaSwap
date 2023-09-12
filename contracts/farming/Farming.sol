@@ -22,7 +22,7 @@ contract Farming is IFarming, Ownable {
     uint256 _totalStacksOnInterval; // current interval total stacks count
     uint256 _totalStacks; // total stacks count
     uint256 _totalEthOnInterval; // current interval eth rewards
-    mapping(address => Erc20Info) _erc20nfos; // information about each erc20 (at current interval)
+    mapping(address => Erc20Info) _erc20infos; // information about each erc20 (at current interval)
     mapping(address => uint256) _ethClaimIntervals; // users eth claim intervals
     mapping(address => mapping(address => uint256)) _erc20ClaimIntervals; // [account][erc20] cache of last erc20 claim intervals for accounts
 
@@ -152,7 +152,7 @@ contract Farming is IFarming, Ownable {
         address erc20,
         uint256 expectedIntervalNumber
     ) internal view returns (Erc20Info memory) {
-        Erc20Info memory info = _erc20nfos[erc20];
+        Erc20Info memory info = _erc20infos[erc20];
         if (expectedIntervalNumber <= info.intervalNumber) return info;
         info.intervalNumber = expectedIntervalNumber;
         info.totalCountOnInterval = this.erc20TotalForRewards(erc20);
@@ -282,12 +282,12 @@ contract Farming is IFarming, Ownable {
 
     function _claimCountForStack(
         uint256 stackCount,
-        uint256 totalStacksOnInterwal,
-        uint256 assetCountOnInterwal
+        uint256 totalStacksOnInterval,
+        uint256 assetCountOnInterval
     ) internal pure returns (uint256) {
-        if (stackCount > totalStacksOnInterwal) return assetCountOnInterwal;
-        if (totalStacksOnInterwal == 0) return 0;
-        return (stackCount * assetCountOnInterwal) / totalStacksOnInterwal;
+        if (stackCount > totalStacksOnInterval) return assetCountOnInterval;
+        if (totalStacksOnInterval == 0) return 0;
+        return (stackCount * assetCountOnInterval) / totalStacksOnInterval;
     }
 
     function erc20ClaimForStack(
@@ -328,7 +328,7 @@ contract Farming is IFarming, Ownable {
             _totalStacksOnInterval,
             _totalEthOnInterval
         );
-        require(claimCount > 0, 'notging to claim');
+        require(claimCount > 0, 'nothing to claim');
         (bool sent, ) = payable(msg.sender).call{ value: claimCount }('');
         require(sent, 'sent ether error: ether is not sent');
         emit OnClaimEth(msg.sender, _stacks[msg.sender], claimCount);
@@ -342,7 +342,7 @@ contract Farming is IFarming, Ownable {
         // move interval
         _nextInterval();
         // move erc20 to interval
-        Erc20Info storage info = _erc20nfos[erc20];
+        Erc20Info storage info = _erc20infos[erc20];
         if (_intervalNumber > info.intervalNumber) {
             info.intervalNumber = _intervalNumber;
             info.totalCountOnInterval = this.erc20TotalForRewards(erc20);

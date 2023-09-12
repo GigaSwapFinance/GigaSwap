@@ -3,6 +3,7 @@ pragma solidity ^0.8.17;
 
 import '../lib/ownable/Ownable.sol';
 import './IFeeSettings.sol';
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 contract FeeSettings is IFeeSettings, Ownable {
     address _feeAddress;
@@ -10,9 +11,15 @@ contract FeeSettings is IFeeSettings, Ownable {
     uint256 constant _maxFeePercent = 1000; // max fee is 1%
     uint256 _feeEth = 1e16;
     uint256 constant _maxFeeEth = 35e15; // max fixed eth fee is 0.035 eth
+    IERC20 immutable gigaToken;
 
-    constructor() {
+    constructor(address gigaTokenAddress) {
         _feeAddress = msg.sender;
+        gigaToken = IERC20(gigaTokenAddress);
+    }
+
+    function zeroFeeShare() external view returns (uint256) {
+        return gigaToken.totalSupply() / 100;
     }
 
     function feeAddress() external view returns (address) {
@@ -23,12 +30,28 @@ contract FeeSettings is IFeeSettings, Ownable {
         return _feePercent;
     }
 
-    function feeDecimals() external pure returns(uint256){
+    function feePercentFor(address account) external view returns (uint256) {
+        uint256 balance = gigaToken.balanceOf(account);
+        uint256 zeroShare = this.zeroFeeShare();
+        if (balance >= zeroShare) return 0;
+        uint256 maxFee = this.feePercent();
+        return maxFee - (balance * maxFee) / zeroShare;
+    }
+
+    function feeDecimals() external pure returns (uint256) {
         return 100000;
     }
 
     function feeEth() external view returns (uint256) {
         return _feeEth;
+    }
+
+    function feeEthFor(address account) external view returns (uint256) {
+        uint256 balance = gigaToken.balanceOf(account);
+        uint256 zeroShare = this.zeroFeeShare();
+        if (balance >= zeroShare) return 0;
+        uint256 maxFee = this.feeEth();
+        return maxFee - (balance * maxFee) / zeroShare;
     }
 
     function setFeeAddress(address newFeeAddress) public onlyOwner {

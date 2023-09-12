@@ -51,12 +51,12 @@ interface IAssetsController {
     function getData(uint256 assetId) external view returns (AssetData memory);
 
     /// @dev withdraw the asset
-    /// @param recepient recepient of asset
+    /// @param recipient recipient of asset
     /// @param count count to withdraw
     /// onlyPositionsController or algorithm
     function withdraw(
         uint256 assetId,
-        address recepient,
+        address recipient,
         uint256 count
     ) external;
 

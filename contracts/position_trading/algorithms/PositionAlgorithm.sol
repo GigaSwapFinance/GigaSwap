@@ -120,6 +120,6 @@ abstract contract PositionAlgorithm is PositionLockerBase {
         external
         onlyPositionOwner(positionId)
     {
-        _permamentLocks[positionId] = true;
+        _permanentLocks[positionId] = true;
     }
 }

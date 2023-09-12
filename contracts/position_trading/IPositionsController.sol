@@ -36,7 +36,7 @@ interface IPositionsController is IHasFactories, IAssetListener {
         );
 
     /// @dev returns total positions count
-    function positionsCount() external returns (uint256);
+    function positionsCount() external view returns (uint256);
 
     /// @dev returns the position owner
     function ownerOf(uint256 positionId) external view returns (address);
@@ -136,7 +136,7 @@ interface IPositionsController is IHasFactories, IAssetListener {
     ) external;
 
     /// @dev internal withdraw asset for algorithms
-    /// oplyPositionAlgorithm
+    /// onlyPositionAlgorithm
     function withdrawInternal(
         ItemRef calldata asset,
         address to,
@@ -144,7 +144,7 @@ interface IPositionsController is IHasFactories, IAssetListener {
     ) external;
 
     /// @dev transfers asset to another same type asset
-    /// oplyPositionAlgorithm
+    /// onlyPositionAlgorithm
     function transferToAnotherAssetInternal(
         ItemRef calldata from,
         ItemRef calldata to,
@@ -155,7 +155,7 @@ interface IPositionsController is IHasFactories, IAssetListener {
     function count(ItemRef calldata asset) external view returns (uint256);
 
     /// @dev returns all counts of the position
-    /// usefull for get snapshot for same algotithms
+    /// useful for get snapshot for same algorithms
     function getCounts(uint256 positionId)
         external
         view

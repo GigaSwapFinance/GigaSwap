@@ -53,10 +53,10 @@ contract EthAssetsController is AssetsControllerBase {
 
     function _withdraw(
         uint256 assetId,
-        address recepient,
+        address recipient,
         uint256 count
     ) internal override {
-        (bool sent, ) = payable(recepient).call{ value: count }('');
+        (bool sent, ) = payable(recipient).call{ value: count }('');
         require(sent, 'sent ether error: ether is not sent');
     }
 
@@ -69,7 +69,7 @@ contract EthAssetsController is AssetsControllerBase {
         override
         returns (uint256 countTransferred, uint256 ethConsumed)
     {
-        require(msg.value >= count, 'not enouth eth');
+        require(msg.value >= count, 'not enough eth');
         _counts[assetId] += count;
         ethConsumed = count;
         countTransferred = count;

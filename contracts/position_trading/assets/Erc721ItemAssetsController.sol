@@ -3,13 +3,14 @@ pragma solidity ^0.8.17;
 
 import 'contracts/position_trading/assets/AssetsControllerBase.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
+import '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
 
 struct Erc721AssetData {
     IERC721 erc721;
     uint256 tokenId;
 }
 
-contract Erc721ItemAssetsController is AssetsControllerBase {
+contract Erc721ItemAssetsController is AssetsControllerBase, IERC721Receiver {
     mapping(uint256 => Erc721AssetData) _data;
 
     constructor(address positionsController)
@@ -62,12 +63,12 @@ contract Erc721ItemAssetsController is AssetsControllerBase {
 
     function _withdraw(
         uint256 assetId,
-        address recepient,
+        address recipient,
         uint256 count
     ) internal override {
         _data[assetId].erc721.transferFrom(
             address(this),
-            recepient,
+            recipient,
             _data[assetId].tokenId
         );
     }
@@ -89,5 +90,14 @@ contract Erc721ItemAssetsController is AssetsControllerBase {
         );
         _counts[assetId] = 1;
         countTransferred = 1;
+    }
+
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external returns (bytes4) {
+        return this.onERC721Received.selector;
     }
 }

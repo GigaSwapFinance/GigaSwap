@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 import '../ownable/IOwnable.sol';
 
 interface IHasFactories is IOwnable {
-    /// @dev returns true, if addres is factory
+    /// @dev returns true, if address is factory
     function isFactory(address addr) external view returns (bool);
 
     /// @dev mark address as factory (only owner)

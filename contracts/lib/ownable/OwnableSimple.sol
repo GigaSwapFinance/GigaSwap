@@ -3,7 +3,7 @@ pragma solidity ^0.8.17;
 
 import 'contracts/lib/ownable/IOwnable.sol';
 
-/// @dev owanble, optimized, for dynamically generated contracts
+/// @dev ownable, optimized, for dynamically generated contracts
 contract OwnableSimple is IOwnable {
     address internal _owner;
 

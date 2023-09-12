@@ -43,6 +43,25 @@ struct PositionAddingAssets {
     ItemRef asset2;
 }
 
+///
+/// error codes:
+/// 1 - no liquidity tokens
+/// 2 - not enough liquidity tokens balance
+/// 3 - locked
+/// 4 - not enough fee tokens balance
+/// 5 - not enough asset to buy
+/// 6 - price changed more than slippage
+/// 7 - too large price impact
+/// 8 - the position is not locked
+/// 9 - has no snapshot
+/// 10 - forward swap is disallowed
+/// 11 - back swap is disallowed
+/// 12 - position id is not exists
+/// 13 - transferred asset 1 count to pair is not correct
+/// 14 - transferred asset 2 count to pair is not correct
+/// 15 - block use limit
+/// 16 - add liquidity calculated countB is zero
+/// 17 - add liquidity assetA count is zero
 contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
     using ItemRefAsAssetLibrary for ItemRef;
 
@@ -52,12 +71,14 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
     mapping(uint256 => TradingPairConstraints) public constraints;
     mapping(uint256 => IErc20ForFactory) public liquidityTokens;
     mapping(uint256 => IErc20ForFactory) public feeTokens;
-    mapping(uint256 => address) public feeDistributers;
+    mapping(uint256 => address) public feedistributors;
+    mapping(uint256 => mapping(address => uint256)) public lastUseBlocks;
     IErc20ForFactoryFactory public erc20Factory;
 
-    constructor(address positionsControllerAddress, address erc20Factory_)
-        PositionAlgorithm(positionsControllerAddress)
-    {
+    constructor(
+        address positionsControllerAddress,
+        address erc20Factory_
+    ) PositionAlgorithm(positionsControllerAddress) {
         erc20Factory = IErc20ForFactoryFactory(erc20Factory_);
     }
 
@@ -80,71 +101,75 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         (ItemRef memory own, ItemRef memory out) = _getAssets(positionId);
 
         // calc support decimals
-        uint8 decimals = own.getDecimals();
-        if (out.getDecimals() > decimals) decimals = out.getDecimals();
+        uint8 decimals = own.estimateDecimals();
+        if (out.estimateDecimals() > decimals) decimals = out.estimateDecimals();
 
+        // liquidity token
         IErc20ForFactory liquidityToken = erc20Factory.create(
             'liquidity',
             'LIQ',
             decimals
         );
-        IErc20ForFactory feeToken = erc20Factory.create('fee', 'FEE', decimals);
         liquidityTokens[positionId] = liquidityToken;
-        feeTokens[positionId] = feeToken;
         liquidityToken.mintTo(
             positionsController.ownerOf(positionId),
             own.count() * out.count()
         );
-        feeToken.mintTo(
-            positionsController.ownerOf(positionId),
-            own.count() * out.count()
-        );
-        // create fee distributor
-        TradingPairFeeDistributer feeDistributer = new TradingPairFeeDistributer(
-                positionId,
-                address(this),
-                address(feeToken),
-                positionsController.getAssetReference(positionId, 1),
-                positionsController.getAssetReference(positionId, 2),
-                feeSettings.feeRoundIntervalHours
+
+        // fee token
+        if (
+            feeSettings.asset1.input != 0 ||
+            feeSettings.asset1.output != 0 ||
+            feeSettings.asset2.input != 0 ||
+            feeSettings.asset2.output != 0
+        ) {
+            IErc20ForFactory feeToken = erc20Factory.create(
+                'fee',
+                'FEE',
+                decimals
             );
-        feeDistributers[positionId] = address(feeDistributer);
+            feeTokens[positionId] = feeToken;
+            feeToken.mintTo(
+                positionsController.ownerOf(positionId),
+                own.count() * out.count()
+            );
+            // create fee distributor
+            TradingPairFeeDistributer feeDistributer = new TradingPairFeeDistributer(
+                    positionId,
+                    address(this),
+                    address(feeToken),
+                    positionsController.getAssetReference(positionId, 1),
+                    positionsController.getAssetReference(positionId, 2),
+                    feeSettings.feeRoundIntervalHours
+                );
+            feedistributors[positionId] = address(feeDistributer);
+        }
         // transfer the owner to the fee distributor
-        //feeasset1.transferOwnership(address(feeDistributer)); // todo проверить работоспособность!!!
-        //feeasset2.transferOwnership(address(feeDistributer));
+        //feeAsset1.transferOwnership(address(feeDistributer)); // todo проверить работоспособность!!!
+        //feeAsset2.transferOwnership(address(feeDistributer));
     }
 
-    function getFeeSettings(uint256 positionId)
-        external
-        view
-        returns (FeeSettings memory)
-    {
+    function getFeeSettings(
+        uint256 positionId
+    ) external view returns (FeeSettings memory) {
         return fee[positionId];
     }
 
-    function getConstraints(uint256 positionId)
-        external
-        view
-        returns (TradingPairConstraints memory)
-    {
+    function getConstraints(
+        uint256 positionId
+    ) external view returns (TradingPairConstraints memory) {
         return constraints[positionId];
     }
 
-    function _positionLocked(uint256 positionId)
-        internal
-        view
-        override
-        returns (bool)
-    {
+    function _positionLocked(
+        uint256 positionId
+    ) internal view override returns (bool) {
         return address(liquidityTokens[positionId]) != address(0); // position lock automatically, after adding the algorithm
     }
 
-    function _isPermanentLock(uint256 positionId)
-        internal
-        view
-        override
-        returns (bool)
-    {
+    function _isPermanentLock(
+        uint256 positionId
+    ) internal view override returns (bool) {
         return _positionLocked(positionId); // position lock automatically, after adding the algorithm
     }
 
@@ -155,10 +180,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
     ) external payable returns (uint256 ethSurplus) {
         ethSurplus = msg.value;
         // position must be created
-        require(
-            address(liquidityTokens[positionId]) != address(0),
-            'position id is not exists'
-        );
+        require(address(liquidityTokens[positionId]) != address(0), '#12');
         AddLiquidityVars memory vars;
         vars.assetBCode = 1;
         if (assetCode == vars.assetBCode) vars.assetBCode = 2;
@@ -174,7 +196,9 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         // take total supply of liquidity tokens
         IErc20ForFactory liquidityToken = liquidityTokens[positionId];
 
+        require(assetA.count() > 0, '#17');
         vars.countB = (count * assetB.count()) / assetA.count();
+        require(vars.countB > 0, '#16');
 
         // save the last asset count
         vars.lastAssetACount = assetA.count();
@@ -191,14 +215,8 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         ethSurplus = positionsController.transferToAssetFrom{
             value: ethSurplus
         }(msg.sender, positionId, vars.assetBCode, vars.countB, data);
-        require(
-            assetA.count() == vars.lastCountA + count,
-            'transferred asset 1 count to pair is not correct'
-        );
-        require(
-            assetB.count() == vars.lastCountB + vars.countB,
-            'transferred asset 2 count to pair is not correct'
-        );
+        require(assetA.count() == vars.lastCountA + count, '#13');
+        require(assetB.count() == vars.lastCountB + vars.countB, '#14');
         assetA.setNotifyListener(true);
         assetB.setNotifyListener(true);
         // mint liquidity tokens
@@ -209,11 +227,14 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         liquidityToken.mintTo(msg.sender, vars.liquidityTokensToMint);
         // mint fee tokens
         IErc20ForFactory feeToken = feeTokens[positionId];
-        feeToken.mintTo(
-            msg.sender,
-            (feeToken.totalSupply() * (assetA.count() - vars.lastAssetACount)) /
-                vars.lastAssetACount
-        );
+        if (address(0) != address(feeToken)) {
+            feeToken.mintTo(
+                msg.sender,
+                (feeToken.totalSupply() *
+                    (assetA.count() - vars.lastAssetACount)) /
+                    vars.lastAssetACount
+            );
+        }
 
         // log event
         if (assetCode == 1) {
@@ -241,11 +262,9 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         }
     }
 
-    function _getAssets(uint256 positionId)
-        internal
-        view
-        returns (ItemRef memory asset1, ItemRef memory asset2)
-    {
+    function _getAssets(
+        uint256 positionId
+    ) internal view returns (ItemRef memory asset1, ItemRef memory asset2) {
         ItemRef memory asset1 = positionsController.getAssetReference(
             positionId,
             1
@@ -260,19 +279,15 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         return (asset1, asset2);
     }
 
-    function getAsset1Price(uint256 positionId)
-        external
-        view
-        returns (uint256)
-    {
+    function getAsset1Price(
+        uint256 positionId
+    ) external view returns (uint256) {
         return _getAsset1Price(positionId);
     }
 
-    function _getAsset1Price(uint256 positionId)
-        internal
-        view
-        returns (uint256)
-    {
+    function _getAsset1Price(
+        uint256 positionId
+    ) internal view returns (uint256) {
         (ItemRef memory asset1, ItemRef memory asset2) = _getAssets(positionId);
         uint256 ownerCount = asset1.count();
         uint256 outputCount = asset2.count();
@@ -280,19 +295,15 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         return ownerCount / outputCount;
     }
 
-    function getAsset2Price(uint256 positionId)
-        external
-        view
-        returns (uint256)
-    {
+    function getAsset2Price(
+        uint256 positionId
+    ) external view returns (uint256) {
         return _getAsset2Price(positionId);
     }
 
-    function _getAsset2Price(uint256 positionId)
-        internal
-        view
-        returns (uint256)
-    {
+    function _getAsset2Price(
+        uint256 positionId
+    ) internal view returns (uint256) {
         (ItemRef memory asset1, ItemRef memory asset2) = _getAssets(positionId);
         uint256 ownerCount = asset1.count();
         uint256 outputCount = asset2.count();
@@ -333,30 +344,35 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
             ((inputLastCount * outputLastCount) / inputNewCount);
     }
 
-    function _afterAssetTransfer(AssetTransferData calldata arg)
-        internal
-        virtual
-        override
-    {
+    function _afterAssetTransfer(
+        AssetTransferData calldata arg
+    ) internal virtual override {
         (ItemRef memory asset1, ItemRef memory asset2) = _getAssets(
             arg.positionId
         );
         // transfers from assets are not processed
         if (arg.from == asset1.addr || arg.from == asset2.addr) return;
         // swap only if editing is locked
-        require(_positionLocked(arg.positionId), 'no lk pos');
+        require(_positionLocked(arg.positionId), '#8');
         // if there is no snapshot, then we do nothing
-        require(arg.data.length == 3, 'no snpsht');
+        require(arg.data.length == 3, '#9');
 
         // take fee
         FeeSettings memory feeSettings = fee[arg.positionId];
         // make a swap
+        ItemRef memory feeDistributerAsset1;
+        ItemRef memory feeDistributerAsset2;
+        if (address(feedistributors[arg.positionId]) != address(0)) {
+            feeDistributerAsset1 = ITradingPairFeeDistributer(
+                feedistributors[arg.positionId]
+            ).asset(1);
+            feeDistributerAsset2 = ITradingPairFeeDistributer(
+                feedistributors[arg.positionId]
+            ).asset(2);
+        }
         if (arg.assetCode == 2) {
             // if the exchange is direct
-            require(
-                !constraints[arg.positionId].disableForwardSwap,
-                'forward swap is disallowed'
-            );
+            require(!constraints[arg.positionId].disableForwardSwap, '#10');
             _swap(
                 arg.positionId,
                 arg.from,
@@ -366,16 +382,11 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
                 feeSettings.asset2,
                 feeSettings.asset1,
                 SwapSnapshot(arg.data[1], arg.data[0], arg.data[2]),
-                ITradingPairFeeDistributer(feeDistributers[arg.positionId])
-                    .asset(2),
-                ITradingPairFeeDistributer(feeDistributers[arg.positionId])
-                    .asset(1)
+                feeDistributerAsset2,
+                feeDistributerAsset1
             );
         } else {
-            require(
-                !constraints[arg.positionId].disableBackSwap,
-                'back swap is disallowed'
-            );
+            require(!constraints[arg.positionId].disableBackSwap, '#11');
             _swap(
                 arg.positionId,
                 arg.from,
@@ -385,10 +396,8 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
                 feeSettings.asset1,
                 feeSettings.asset2,
                 SwapSnapshot(arg.data[0], arg.data[1], arg.data[2]),
-                ITradingPairFeeDistributer(feeDistributers[arg.positionId])
-                    .asset(1),
-                ITradingPairFeeDistributer(feeDistributers[arg.positionId])
-                    .asset(2)
+                feeDistributerAsset1,
+                feeDistributerAsset2
             );
         }
     }
@@ -405,6 +414,9 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         ItemRef memory inputFeeAsset,
         ItemRef memory outputFeeAsset
     ) internal {
+        // use blockLimit
+        require(lastUseBlocks[positionId][from] + 1 < block.number, '#15');
+        lastUseBlocks[positionId][from] = block.number;
         SwapVars memory vars;
         // count how much bought
         vars.inputlastCount = input.count() - amount;
@@ -413,7 +425,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
             input.count(),
             output.count()
         );
-        require(vars.buyCount <= output.count(), 'not enough asset to buy');
+        require(vars.buyCount <= output.count(), '#5');
 
         // count the old price
         vars.lastPrice = (vars.inputlastCount * priceDecimals) / output.count();
@@ -464,17 +476,17 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         vars.snapPrice = (snapshot.input * priceDecimals) / snapshot.output;
         if (vars.snapPrice == 0) vars.snapPrice = 1;
         // slippage limiter
-        if (vars.newPrice >= vars.snapPrice)
-            vars.slippage = (vars.newPrice * priceDecimals) / vars.snapPrice;
-        else vars.slippage = (vars.snapPrice * priceDecimals) / vars.newPrice;
+        if (vars.lastPrice >= vars.snapPrice)
+            vars.slippage = (vars.lastPrice * priceDecimals) / vars.snapPrice;
+        else vars.slippage = (vars.snapPrice * priceDecimals) / vars.lastPrice;
 
-        require(vars.slippage <= snapshot.slippage, 'chngd more than slppg');
+        require(vars.slippage <= snapshot.slippage, '#6');
 
         // price should not change more than 50%
         vars.priceImpact = (vars.newPrice * priceDecimals) / vars.lastPrice;
         require(
             vars.priceImpact <= priceDecimals + priceDecimals / 2, // 150% of priceDecimals
-            'large impct'
+            '#7'
         );
 
         // event
@@ -492,15 +504,12 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         // take a tokens
         IErc20ForFactory liquidityToken = liquidityTokens[positionId];
         IErc20ForFactory feeToken = feeTokens[positionId];
-        require(address(liquidityToken) != address(0), 'no lquidity tokens');
-        require(
-            liquidityToken.balanceOf(msg.sender) >= liquidityCount,
-            'not enough liquidity tokens balance'
-        );
+        require(address(liquidityToken) != address(0), '#1');
+        require(liquidityToken.balanceOf(msg.sender) >= liquidityCount, '#2');
         require(
             address(feeToken) == address(0) ||
                 feeToken.balanceOf(msg.sender) >= liquidityCount,
-            'not enough fee tokens balance'
+            '#4'
         );
         // take assets
         (ItemRef memory own, ItemRef memory out) = _getAssets(positionId);
@@ -533,18 +542,13 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         uint256 assetCode,
         uint256 count
     ) external view {
-        require(!this.positionLocked(asset.getPositionId()), 'locked');
+        require(!this.positionLocked(asset.getPositionId()), '#3');
     }
 
-    function getSnapshot(uint256 positionId, uint256 slippage)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function getSnapshot(
+        uint256 positionId,
+        uint256 slippage
+    ) external view returns (uint256, uint256, uint256) {
         return (
             positionsController.getAssetReference(positionId, 1).count(),
             positionsController.getAssetReference(positionId, 2).count(),
@@ -556,11 +560,9 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         return address(positionsController);
     }
 
-    function getLiquidityToken(uint256 positionId)
-        external
-        view
-        returns (address)
-    {
+    function getLiquidityToken(
+        uint256 positionId
+    ) external view returns (address) {
         return address(liquidityTokens[positionId]);
     }
 
@@ -568,12 +570,10 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         return address(feeTokens[positionId]);
     }
 
-    function getFeeDistributer(uint256 positionId)
-        external
-        view
-        returns (address)
-    {
-        return feeDistributers[positionId];
+    function getFeeDistributer(
+        uint256 positionId
+    ) external view returns (address) {
+        return feedistributors[positionId];
     }
 
     function ClaimFeeReward(
@@ -583,7 +583,7 @@ contract TradingPairAlgorithm is PositionAlgorithm, ITradingPairAlgorithm {
         uint256 asset2Count,
         uint256 feeTokensCount
     ) external {
-        require(feeDistributers[positionId] == msg.sender);
+        require(feedistributors[positionId] == msg.sender);
         emit OnClaimFeeReward(
             positionId,
             account,

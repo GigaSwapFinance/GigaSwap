@@ -10,6 +10,7 @@ import './IgWETH.sol';
     mapping(address => bool) _withoutAllowance;
     address _owner;
 
+    //constructor() ERC20('GigaSwap Wrapped Ethereum', 'gWETH') {  
     constructor() Erc20Min('GigaSwap Wrapped Ethereum', 'gWETH') {
         _owner = msg.sender;
     }

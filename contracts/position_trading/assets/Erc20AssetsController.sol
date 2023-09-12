@@ -58,10 +58,10 @@ contract Erc20AssetsController is AssetsControllerBase {
 
     function _withdraw(
         uint256 assetId,
-        address recepient,
+        address recipient,
         uint256 count
     ) internal override {
-        _contracts[assetId].safeTransfer(recepient, count);
+        _contracts[assetId].safeTransfer(recipient, count);
     }
 
     function _transferToAsset(

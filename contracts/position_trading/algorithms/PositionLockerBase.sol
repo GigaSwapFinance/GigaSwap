@@ -6,7 +6,7 @@ import 'contracts/position_trading/IPositionsController.sol';
 /// @dev locks the asset of the position owner for a certain time
 abstract contract PositionLockerBase {
     mapping(uint256 => uint256) public unlockTimes; // unlock time by position
-    mapping(uint256 => bool) _permamentLocks;
+    mapping(uint256 => bool) _permanentLocks;
 
     modifier onlyUnlockedPosition(uint256 positionId) {
         require(!_positionLocked(positionId), 'for unlocked positions only');
@@ -43,7 +43,7 @@ abstract contract PositionLockerBase {
         virtual
         returns (bool)
     {
-        return _permamentLocks[positionId];
+        return _permanentLocks[positionId];
     }
 
     function lapsedLockSeconds(uint256 positionId)

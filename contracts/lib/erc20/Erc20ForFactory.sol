@@ -6,7 +6,7 @@ import './IErc20ForFactory.sol';
 
 contract Erc20ForFactory is IErc20ForFactory, ERC20 {
     uint8 _decimals;
-    address public factory;
+    address public immutable factory;
 
     constructor(
         string memory name_,

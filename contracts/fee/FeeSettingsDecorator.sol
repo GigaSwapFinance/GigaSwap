@@ -10,19 +10,31 @@ contract FeeSettingsDecorator is IFeeSettings {
         feeSettings = IFeeSettings(feeSettingsAddress);
     }
 
-    function feeAddress() external virtual returns (address) {
+    function zeroFeeShare() external view virtual returns (uint256) {
+        return feeSettings.zeroFeeShare();
+    }
+
+    function feeAddress() external view virtual returns (address) {
         return feeSettings.feeAddress();
     }
 
-    function feePercent() external virtual returns (uint256) {
+    function feePercent() external view virtual returns (uint256) {
         return feeSettings.feePercent();
     }
 
-    function feeDecimals() external view returns(uint256){
+    function feePercentFor(address account) external view returns (uint256) {
+        return feeSettings.feePercentFor(account);
+    }
+
+    function feeDecimals() external view returns (uint256) {
         return feeSettings.feeDecimals();
     }
 
-    function feeEth() external virtual returns (uint256) {
+    function feeEth() external view virtual returns (uint256) {
         return feeSettings.feeEth();
+    }
+
+    function feeEthFor(address account) external view returns (uint256) {
+        return feeSettings.feeEthFor(account);
     }
 }

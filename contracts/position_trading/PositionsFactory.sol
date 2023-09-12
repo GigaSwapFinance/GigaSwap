@@ -108,10 +108,8 @@ contract PositionsFactory is OwnableSimple {
         uint256 ethSurplus
     ) internal returns (uint256) {
         IAssetsController controller;
-        uint256 value;
 
         if (data.assetTypeCode == 1) {
-            value = msg.value;
             controller = ethAssetsController;
         } else if (data.assetTypeCode == 2) {
             controller = erc20AssetsController;

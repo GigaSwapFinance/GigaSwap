@@ -42,10 +42,10 @@ contract PositionsController is HasFactories, IPositionsController {
         _;
     }
 
-    modifier oplyPositionAlgorithm(uint256 positionId) {
+    modifier onlyPositionAlgorithm(uint256 positionId) {
         require(
             this.getAlgorithm(positionId) == msg.sender,
-            'only for position algotithm'
+            'only for position algorithm'
         );
         _;
     }
@@ -77,7 +77,7 @@ contract PositionsController is HasFactories, IPositionsController {
         if (ref.addr != address(0)) asset2 = ref.getData();
     }
 
-    function positionsCount() external returns (uint256) {
+    function positionsCount() external view returns (uint256) {
         return _positionsCount;
     }
 
@@ -220,26 +220,7 @@ contract PositionsController is HasFactories, IPositionsController {
         uint256 count,
         uint256[] calldata data
     ) external payable returns (uint256 ethSurplus) {
-        ItemRef memory asset = this.getAssetReference(positionId, assetCode);
-        ethSurplus = IAssetsController(asset.addr).transferToAsset{
-            value: msg.value
-        }(
-            AssetTransferData(
-                positionId,
-                asset,
-                assetCode,
-                msg.sender,
-                asset.addr,
-                count,
-                data
-            )
-        );
-        if (ethSurplus > 0) {
-            (bool surplusSent, ) = payable(msg.sender).call{
-                value: ethSurplus
-            }('');
-            require(surplusSent, 'ethereum surplus is not sent');
-        }
+        return _transferToAssetFrom(msg.sender, positionId, assetCode, count, data);
     }
 
     function transferToAssetFrom(
@@ -249,6 +230,16 @@ contract PositionsController is HasFactories, IPositionsController {
         uint256 count,
         uint256[] calldata data
     ) external payable onlyFactory returns (uint256 ethSurplus) {
+        return _transferToAssetFrom(from, positionId, assetCode, count, data);
+    }
+
+    function _transferToAssetFrom(
+        address from,
+        uint256 positionId,
+        uint256 assetCode,
+        uint256 count,
+        uint256[] calldata data
+    ) private returns (uint256 ethSurplus) {
         ItemRef memory asset = this.getAssetReference(positionId, assetCode);
         ethSurplus = IAssetsController(asset.addr).transferToAsset{
             value: msg.value
@@ -273,7 +264,7 @@ contract PositionsController is HasFactories, IPositionsController {
         ItemRef calldata from,
         ItemRef calldata to,
         uint256 count
-    ) external oplyPositionAlgorithm(from.getPositionId()) {
+    ) external onlyPositionAlgorithm(from.getPositionId()) {
         require(
             from.assetTypeId() == to.assetTypeId(),
             'transfer from asset to must be same types'
@@ -296,7 +287,7 @@ contract PositionsController is HasFactories, IPositionsController {
         uint256 assetCode,
         address to,
         uint256 count
-    ) external {
+    ) external onlyPositionOwner(positionId) {
         _withdrawTo(positionId, assetCode, to, count);
     }
 
@@ -322,7 +313,7 @@ contract PositionsController is HasFactories, IPositionsController {
         ItemRef calldata asset,
         address to,
         uint256 count
-    ) external oplyPositionAlgorithm(asset.getPositionId()) {
+    ) external onlyPositionAlgorithm(asset.getPositionId()) {
         asset.withdraw(to, count);
     }
 

@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: UNLICENSED
 /**
  *Submitted for verification at Etherscan.io on 2022-08-16
 */
@@ -477,14 +476,14 @@ abstract contract TradableErc20 is ERC20, DoubleSwapped, Ownable, Withdrawable {
         super._transfer(from, to, amount);
     }
 
-    function getFeeBuy(address, uint256 amount)
+    function getFeeBuy(address account, uint256 amount)
         public view
         returns (uint256)
     {
         return (amount * buyFeePpm) / 1000;
     }
 
-    function getFeeSell(address, uint256 amount)
+    function getFeeSell(address account, uint256 amount)
         public view
         returns (uint256)
     {
@@ -593,7 +592,7 @@ struct AirdropData {
     uint256 count;
 }
 
-contract GigaSwapErc20 is TradableErc20 {
+contract GigaSwapToken is TradableErc20 {
     constructor() TradableErc20("GigaSwap", "GIGA") {}
 
     function getSupplyForMakeLiquidity()

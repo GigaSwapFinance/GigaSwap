@@ -34,7 +34,7 @@ struct Erc721CountPointCreationData {
 }
 struct DealCreationData {
     address owner2; // another owner or zero if open swap
-    EtherPointCreationData[] eth; // tyoe id 1
+    EtherPointCreationData[] eth; // type id 1
     Erc20PointCreationData[] erc20; // type id 2
     Erc721ItemPointCreationData[] erc721Item; // type id 3
     Erc721CountPointCreationData[] erc721Count; // type id 4
@@ -71,7 +71,7 @@ contract DealsFactory {
         uint256 dealId = dealsController.createDeal(msg.sender, data.owner2);
         // create points
         for (uint256 i = 0; i < data.eth.length; ++i) {
-            checkPoindAddresses(data.eth[i].from, data.eth[i].to, data.owner2);
+            checkPointAddresses(data.eth[i].from, data.eth[i].to, data.owner2);
             eth.createPoint(
                 dealId,
                 data.eth[i].from,
@@ -80,7 +80,7 @@ contract DealsFactory {
             );
         }
         for (uint256 i = 0; i < data.erc20.length; ++i) {
-            checkPoindAddresses(
+            checkPointAddresses(
                 data.erc20[i].from,
                 data.erc20[i].to,
                 data.owner2
@@ -94,7 +94,7 @@ contract DealsFactory {
             );
         }
         for (uint256 i = 0; i < data.erc721Item.length; ++i) {
-            checkPoindAddresses(
+            checkPointAddresses(
                 data.erc721Item[i].from,
                 data.erc721Item[i].to,
                 data.owner2
@@ -108,7 +108,7 @@ contract DealsFactory {
             );
         }
         for (uint256 i = 0; i < data.erc721Count.length; ++i) {
-            checkPoindAddresses(
+            checkPointAddresses(
                 data.erc721Count[i].from,
                 data.erc721Count[i].to,
                 data.owner2
@@ -126,7 +126,7 @@ contract DealsFactory {
         dealsController.stopDealEditing(dealId);
     }
 
-    function checkPoindAddresses(
+    function checkPointAddresses(
         address from,
         address to,
         address owner2

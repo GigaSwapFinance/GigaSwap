@@ -5,11 +5,11 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 interface IErc20ForFactory is IERC20 {
     /// @dev mint
-    /// pnlyFactory
+    /// onlyFactory
     function mint(uint256 count) external;
 
     /// @dev mint to address
-    /// pnlyFactory
+    /// onlyFactory
     function mintTo(address account, uint256 count) external;
 
     /// @dev burn tokens
